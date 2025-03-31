@@ -1,0 +1,64 @@
+#!/usr/bin/env php
+<?php
+
+use Composer\InstalledVersions;
+use Monolog\Formatter\LineFormatter;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
+use PhpPacker\Config\Configuration;
+use PhpPacker\Packer;
+use Psr\Log\LoggerInterface;
+
+ini_set('memory_limit', '2G');
+date_default_timezone_set('asia/shanghai');
+
+// 不要删除这一行，这是为了阻止其他包内置vendor带来的问题
+class_exists(InstalledVersions::class);
+
+// 检查参数
+if ($argc < 2) {
+    echo "Usage: php pack.php <config_file>\n";
+    exit(1);
+}
+
+function createLogger(): LoggerInterface
+{
+    $logger = new Logger('packer');
+    
+    // 添加控制台输出
+    $stdoutHandler = new StreamHandler('php://stdout', Logger::DEBUG);
+    $consoleFormatter = new LineFormatter(
+        dateFormat: 'Y-m-d H:i:s',
+        allowInlineLineBreaks: true
+    );
+    $stdoutHandler->setFormatter($consoleFormatter);
+    $logger->pushHandler($stdoutHandler);
+    
+    // 添加文件日志
+    $fileHandler = new StreamHandler(
+        dirname(__DIR__) . '/var/log/packer.log',
+        Logger::DEBUG
+    );
+    $fileFormatter = new LineFormatter(
+        "[%datetime%] %channel%.%level_name%: %message% %context% %extra%\n",
+        'Y-m-d H:i:s',
+        true
+    );
+    $fileHandler->setFormatter($fileFormatter);
+    $logger->pushHandler($fileHandler);
+    
+    return $logger;
+}
+
+$logger = createLogger();
+$configFile = $argv[1];
+$logger->info('Starting packer with config file: ' . $configFile);
+
+// 创建配置对象
+$config = new Configuration($configFile, $logger);
+
+// 创建打包器并执行
+$packer = new Packer($config, $logger);
+$packer->pack();
+
+$logger->info('Packing completed successfully');
