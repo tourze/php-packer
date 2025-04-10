@@ -2,8 +2,8 @@
 
 namespace PhpPacker\Generator;
 
+use PhpPacker\Ast\AstManagerInterface;
 use PhpPacker\Config\Configuration;
-use PhpPacker\Parser\AstManager;
 use PhpPacker\Visitor\RemoveNamespaceVisitor;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
@@ -19,20 +19,25 @@ use PhpParser\Node\Scalar\MagicConst\Dir;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\If_;
+use PhpParser\PrettyPrinter\Standard;
 use Psr\Log\LoggerInterface;
-use Rector\PhpParser\Printer\BetterStandardPrinter;
 
 class CodeGenerator
 {
-    private BetterStandardPrinter $printer;
+    private Configuration $config;
+    private AstManagerInterface $astManager;
+    private LoggerInterface $logger;
+    private Standard $printer;
 
     public function __construct(
-        private readonly Configuration $config,
-        private readonly AstManager $astManager,
-        private readonly LoggerInterface $logger,
-    )
-    {
-        $this->printer = new BetterStandardPrinter();
+        Configuration $config,
+        AstManagerInterface $astManager,
+        LoggerInterface $logger
+    ) {
+        $this->config = $config;
+        $this->astManager = $astManager;
+        $this->logger = $logger;
+        $this->printer = new Standard();
     }
 
     private function generateResourceHolder(string $resFile): \Traversable
@@ -98,7 +103,7 @@ class CodeGenerator
         );
     }
 
-    public function generate(AstManager $astManager, array $phpFiles, array $resourceFiles): string
+    public function generate(AstManagerInterface $astManager, array $phpFiles, array $resourceFiles): string
     {
         $this->logger->debug('Generating code');
 

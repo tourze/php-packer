@@ -9,6 +9,8 @@
     "psr/log": "^3|^2|^1",
     "rector/rector-src": "^2.0",
     "symfony/stopwatch": "^6.4",
+    "tourze/php-packer-ast": "0.0.*",
+    "tourze/php-packer-analysis": "0.0.*",
     "yiisoft/json": "^1.0"
   },
   "require-dev": {

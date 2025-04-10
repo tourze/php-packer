@@ -2,12 +2,13 @@
 
 namespace PhpPacker;
 
-use PhpPacker\Analyzer\DependencyAnalyzer;
-use PhpPacker\Analyzer\ReflectionService;
+use PhpPacker\Adapter\DependencyAnalyzerAdapter;
+use PhpPacker\Adapter\ReflectionServiceAdapter;
+use PhpPacker\Ast\AstManager;
+use PhpPacker\Ast\AstManagerInterface;
 use PhpPacker\Config\Configuration;
 use PhpPacker\Exception\ResourceException;
 use PhpPacker\Generator\CodeGenerator;
-use PhpPacker\Parser\AstManager;
 use PhpPacker\Parser\CodeParser;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Stopwatch\Stopwatch;
@@ -15,18 +16,18 @@ use Symfony\Component\Stopwatch\Stopwatch;
 class Packer
 {
     private LoggerInterface $logger;
-    private AstManager $astManager;
+    private AstManagerInterface $astManager;
     private CodeParser $parser;
     private CodeGenerator $generator;
-    private DependencyAnalyzer $analyzer;
-    private ReflectionService $reflectionService;
+    private DependencyAnalyzerAdapter $analyzer;
+    private ReflectionServiceAdapter $reflectionService;
 
     public function __construct(private readonly Configuration $config, LoggerInterface $logger)
     {
         $this->logger = $logger;
-        $this->reflectionService = new ReflectionService($this->config);
+        $this->reflectionService = new ReflectionServiceAdapter($this->config, $logger);
         $this->astManager = new AstManager($logger);
-        $this->analyzer = new DependencyAnalyzer($this->astManager, $this->reflectionService, $logger);
+        $this->analyzer = new DependencyAnalyzerAdapter($this->astManager, $this->reflectionService, $logger);
         $this->parser = new CodeParser($this->config, $logger, $this->analyzer, $this->astManager);
         $this->generator = new CodeGenerator($this->config, $this->astManager, $logger);
     }

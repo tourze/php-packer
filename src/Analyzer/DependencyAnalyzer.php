@@ -2,7 +2,7 @@
 
 namespace PhpPacker\Analyzer;
 
-use PhpPacker\Parser\AstManager;
+use PhpPacker\Ast\AstManagerInterface;
 use PhpPacker\Visitor\UseClassCollectorVisitor;
 use PhpPacker\Visitor\UseFunctionCollectorVisitor;
 use PhpPacker\Visitor\UseResourceCollectorVisitor;
@@ -12,7 +12,7 @@ use Yiisoft\Json\Json;
 class DependencyAnalyzer
 {
     public function __construct(
-        private readonly AstManager $astManager,
+        private readonly AstManagerInterface $astManager,
         private readonly ReflectionService $reflectionService,
         private readonly LoggerInterface $logger,
     )
