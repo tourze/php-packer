@@ -3,6 +3,7 @@
 namespace PhpPacker\Adapter;
 
 use PhpPacker\Analysis\Dependency\DependencyAnalyzer as AnalysisDependencyAnalyzer;
+use PhpPacker\Analysis\Visitor\DefaultVisitorFactory;
 use PhpPacker\Ast\AstManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -26,8 +27,19 @@ class DependencyAnalyzerAdapter
         ReflectionServiceAdapter $reflectionService,
         private readonly LoggerInterface $logger
     ) {
-        // 创建底层依赖分析器
-        $this->analyzer = new AnalysisDependencyAnalyzer($astManager, $reflectionService->getReflectionService(), $logger);
+        // 创建访问者工厂
+        $visitorFactory = new DefaultVisitorFactory();
+        
+        // 创建底层依赖分析器，添加visitorFactory参数
+        $this->analyzer = new AnalysisDependencyAnalyzer(
+            $astManager, 
+            $reflectionService->getReflectionService(), 
+            $visitorFactory,
+            null,
+            null,
+            null,
+            $logger
+        );
     }
 
     /**

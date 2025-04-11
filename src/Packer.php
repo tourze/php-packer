@@ -9,6 +9,8 @@ use PhpPacker\Ast\AstManagerInterface;
 use PhpPacker\Config\Configuration;
 use PhpPacker\Exception\ResourceException;
 use PhpPacker\Generator\CodeGenerator;
+use PhpPacker\Generator\CodeGeneratorInterface;
+use PhpPacker\Generator\Config\GeneratorConfig;
 use PhpPacker\Parser\CodeParser;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Stopwatch\Stopwatch;
@@ -18,7 +20,7 @@ class Packer
     private LoggerInterface $logger;
     private AstManagerInterface $astManager;
     private CodeParser $parser;
-    private CodeGenerator $generator;
+    private CodeGeneratorInterface $generator;
     private DependencyAnalyzerAdapter $analyzer;
     private ReflectionServiceAdapter $reflectionService;
 
@@ -29,7 +31,14 @@ class Packer
         $this->astManager = new AstManager($logger);
         $this->analyzer = new DependencyAnalyzerAdapter($this->astManager, $this->reflectionService, $logger);
         $this->parser = new CodeParser($this->config, $logger, $this->analyzer, $this->astManager);
-        $this->generator = new CodeGenerator($this->config, $this->astManager, $logger);
+        
+        // 创建生成器配置
+        $generatorConfig = new GeneratorConfig();
+        $generatorConfig->setPreserveComments($this->config->shouldKeepComments());
+        $generatorConfig->setRemoveNamespace($this->config->shouldRemoveNamespace());
+        
+        // 创建代码生成器
+        $this->generator = new CodeGenerator($generatorConfig, $this->astManager, $logger);
     }
     
     public function pack(): void

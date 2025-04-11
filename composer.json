@@ -11,6 +11,8 @@
     "symfony/stopwatch": "^6.4",
     "tourze/php-packer-ast": "0.0.*",
     "tourze/php-packer-analysis": "0.0.*",
+    "tourze/php-packer-generator": "0.0.*",
+    "tourze/php-packer-parser": "0.0.*",
     "yiisoft/json": "^1.0"
   },
   "require-dev": {

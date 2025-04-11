@@ -4,24 +4,38 @@ namespace PhpPacker\Parser;
 
 use PhpPacker\Adapter\DependencyAnalyzerAdapter;
 use PhpPacker\Ast\AstManagerInterface;
-use PhpPacker\Ast\CodeParser as AstCodeParser;
-use PhpPacker\Ast\ParserFactory as AstParserFactory;
 use PhpPacker\Config\Configuration;
-use PhpPacker\Exception\ResourceException;
-use PhpParser\Parser;
+use PhpPacker\Parser\Config\ParserConfig as ExternalParserConfig;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\Stopwatch\Stopwatch;
 
+/**
+ * 解析器适配器，使用新包中的解析器
+ */
 class CodeParser
 {
-    private Configuration $config;
-    private LoggerInterface $logger;
-    private array $processedFiles = [];
-    private array $dependencies = [];
-    private array $psr4Map = [];
-    private Parser $parser;
-    private AstCodeParser $astCodeParser;
+    /**
+     * 底层使用的解析器
+     *
+     * @var \PhpPacker\Parser\CodeParserInterface
+     */
+    private $externalParser;
 
+    /**
+     * 配置对象
+     */
+    private Configuration $config;
+
+    /**
+     * 日志记录器
+     */
+    private LoggerInterface $logger;
+
+    /**
+     * @param Configuration $config 配置对象
+     * @param LoggerInterface $logger 日志记录器
+     * @param DependencyAnalyzerAdapter $dependencyAnalyzer 依赖分析器适配器
+     * @param AstManagerInterface $astManager AST管理器
+     */
     public function __construct(
         Configuration $config,
         LoggerInterface $logger,
@@ -31,85 +45,62 @@ class CodeParser
     {
         $this->config = $config;
         $this->logger = $logger;
-        $this->loadPsr4Map();
-
-        $this->parser = AstParserFactory::createPhp81Parser();
-        $this->astCodeParser = new AstCodeParser($this->astManager, $this->parser, $this->logger);
-    }
-    
-    private function loadPsr4Map(): void
-    {
-        $vendorPath = dirname($this->config->getEntryFile()) . '/vendor/';
-        $autoloadFile = $vendorPath . 'composer/autoload_psr4.php';
         
-        if (file_exists($autoloadFile)) {
-            $this->psr4Map = require $autoloadFile;
-            $this->logger->debug('Loaded PSR-4 autoload map', [
-                'namespaces' => array_keys($this->psr4Map)
-            ]);
-        } else {
-            $this->logger->warning('PSR-4 autoload map not found');
-        }
+        // 创建外部解析器配置
+        $parserConfig = new ExternalParserConfig();
+        $parserConfig->setEnableStopwatch(true);
+        
+        // 创建并配置外部解析器
+        $entryFile = $this->config->getEntryFile();
+        $excludePatterns = $this->config->getExclude();
+        
+        // 使用ParserFactory创建解析器实例
+        $this->externalParser = \PhpPacker\Parser\ParserFactory::create(
+            $entryFile,
+            $excludePatterns,
+            $parserConfig,
+            $logger
+        );
     }
     
+    /**
+     * 解析文件
+     */
     public function parse(string $file): void
     {
-        if ($this->isFileProcessed($file)) {
-            return;
-        }
-
-        $stopwatch = new Stopwatch();
-        $stopwatch->start('parse');
-
-        $this->logger->debug('Parsing file', ['file' => $file]);
-
-        // 使用新的AST解析器解析文件
-        $ast = $this->astCodeParser->parseFile($file);
-        $this->processedFiles[] = $file;
-
-        // 分析文件中的依赖
-        $this->dependencies[$file] = iterator_to_array($this->dependencyAnalyzer->findDepFiles($file, $ast));
-
-        // 递归分析依赖文件
-        foreach ($this->dependencies[$file] ?? [] as $dependencyFile) {
-            $this->parse($dependencyFile);
-        }
-
-        $event = $stopwatch->stop('parse');
-        $this->logger->debug('File parsed successfully', [
-            'file' => $file,
-            'stopwatch' => strval($event),
-        ]);
-    }
-
-    private function parseCode(string $fileName): array
-    {
-        $code = @file_get_contents($fileName);
-        if ($code === false) {
-            throw new ResourceException("Failed to read file: $fileName");
-        }
-
-        // 使用AST解析器解析代码
-        return $this->astCodeParser->parseCode($code, $fileName);
+        $this->logger->debug('Using external parser to parse file', ['file' => $file]);
+        $this->externalParser->parse($file);
     }
     
-    private function isFileProcessed(string $file): bool
+    /**
+     * 检查文件是否已处理
+     */
+    public function isFileProcessed(string $file): bool
     {
-        return in_array($file, $this->processedFiles);
+        return $this->externalParser->isFileProcessed($file);
     }
-    
+
+    /**
+     * 获取AST管理器
+     */
     public function getAstManager(): AstManagerInterface
     {
         return $this->astManager;
     }
-    
+
+    /**
+     * 获取已处理的文件列表
+     */
     public function getProcessedFiles(): array
     {
-        return $this->processedFiles;
+        return $this->externalParser->getProcessedFiles();
     }
-    
+
+    /**
+     * 获取依赖关系映射
+     */
     public function getDependencies(): array
     {
-        return $this->dependencies;
+        return $this->externalParser->getDependencies();
     }
 }
