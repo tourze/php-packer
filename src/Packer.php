@@ -2,16 +2,17 @@
 
 namespace PhpPacker;
 
+use PhpPacker\Adapter\ConfigurationAdapter;
 use PhpPacker\Adapter\DependencyAnalyzerAdapter;
 use PhpPacker\Adapter\ReflectionServiceAdapter;
+use PhpPacker\Adapter\ResourceManagerAdapter;
 use PhpPacker\Ast\AstManager;
 use PhpPacker\Ast\AstManagerInterface;
-use PhpPacker\Config\Configuration;
-use PhpPacker\Exception\ResourceException;
 use PhpPacker\Generator\CodeGenerator;
 use PhpPacker\Generator\CodeGeneratorInterface;
 use PhpPacker\Generator\Config\GeneratorConfig;
 use PhpPacker\Parser\CodeParser;
+use PhpPacker\Resource\Exception\ResourceException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Stopwatch\Stopwatch;
 
@@ -23,24 +24,26 @@ class Packer
     private CodeGeneratorInterface $generator;
     private DependencyAnalyzerAdapter $analyzer;
     private ReflectionServiceAdapter $reflectionService;
+    private ResourceManagerAdapter $resourceManager;
 
-    public function __construct(private readonly Configuration $config, LoggerInterface $logger)
+    public function __construct(private readonly ConfigurationAdapter $config, LoggerInterface $logger)
     {
         $this->logger = $logger;
         $this->reflectionService = new ReflectionServiceAdapter($this->config, $logger);
         $this->astManager = new AstManager($logger);
         $this->analyzer = new DependencyAnalyzerAdapter($this->astManager, $this->reflectionService, $logger);
-        $this->parser = new CodeParser($this->config, $logger, $this->analyzer, $this->astManager);
-        
+        $this->parser = new CodeParser($this->analyzer, $this->astManager, null, null, $logger);
+        $this->resourceManager = new ResourceManagerAdapter($this->config, $logger);
+
         // 创建生成器配置
         $generatorConfig = new GeneratorConfig();
         $generatorConfig->setPreserveComments($this->config->shouldKeepComments());
         $generatorConfig->setRemoveNamespace($this->config->shouldRemoveNamespace());
-        
+
         // 创建代码生成器
         $this->generator = new CodeGenerator($generatorConfig, $this->astManager, $logger);
     }
-    
+
     public function pack(): void
     {
         $stopwatch = new Stopwatch();
@@ -65,7 +68,8 @@ class Packer
         // 额外加载资源文件
         $resources = [];
         foreach ($phpFiles as $phpFile) {
-            foreach ($this->analyzer->findUsedResources($phpFile, $this->astManager->getAst($phpFile)) as $resource) {
+            $used_resources = $this->analyzer->findUsedResources($phpFile, $this->astManager->getAst($phpFile));
+            foreach ($used_resources as $resource) {
                 $resources[] = $resource;
             }
         }
@@ -80,7 +84,7 @@ class Packer
 
         // 复制资源文件
         $this->logger->debug('Copying resources');
-        $this->copyResources();
+        $this->resourceManager->copyResources();
 
         //$this->logger->debug('Generating self-execute file');
         //$this->generateSelfExecuteFile();
@@ -92,34 +96,17 @@ class Packer
     {
         $outputFile = $this->config->getOutputFile();
         $this->logger->info('Writing output file');
-        
+
         $dir = dirname($outputFile);
         if (!is_dir($dir)) {
             mkdir($dir, 0777, true);
         }
-        
+
         if (file_put_contents($outputFile, $code) === false) {
             throw new ResourceException("Failed to write output file: $outputFile");
         }
-        
+
         $this->logger->debug('Output file written successfully');
-    }
-
-    private function copyResources(): void
-    {
-        $assets = $this->config->getAssets();
-        foreach ($assets as $source => $target) {
-            $targetPath = dirname($this->config->getOutputFile()) . '/' . $target;
-            $dir = dirname($targetPath);
-            if (!is_dir($dir)) {
-                mkdir($dir, 0777, true);
-            }
-
-            $this->logger->debug('Copying resources', ['source' => $source, 'target' => $target]);
-            if (!copy($source, $targetPath)) {
-                throw new ResourceException("Failed to copy resource: $source to $targetPath");
-            }
-        }
     }
 
 //    private function generateSelfExecuteFile(): void

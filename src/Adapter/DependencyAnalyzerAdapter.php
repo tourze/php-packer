@@ -3,6 +3,7 @@
 namespace PhpPacker\Adapter;
 
 use PhpPacker\Analysis\Dependency\DependencyAnalyzer as AnalysisDependencyAnalyzer;
+use PhpPacker\Analysis\Dependency\DependencyAnalyzerInterface;
 use PhpPacker\Analysis\Visitor\DefaultVisitorFactory;
 use PhpPacker\Ast\AstManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -10,7 +11,7 @@ use Psr\Log\LoggerInterface;
 /**
  * 依赖分析器适配器，将新包中的DependencyAnalyzer适配到旧版用法
  */
-class DependencyAnalyzerAdapter
+class DependencyAnalyzerAdapter implements DependencyAnalyzerInterface
 {
     /**
      * 底层使用的依赖分析器
@@ -53,7 +54,7 @@ class DependencyAnalyzerAdapter
     /**
      * 传入AST数组，获取所有依赖的文件列表
      */
-    public function findDepFiles(string $fileName, array $stmts): \Traversable
+    public function findDependencies(string $fileName, array $stmts): \Traversable
     {
         return $this->analyzer->findDependencies($fileName, $stmts);
     }
@@ -65,4 +66,4 @@ class DependencyAnalyzerAdapter
     {
         return $this->analyzer->findUsedResources($fileName, $stmts);
     }
-} 
+}

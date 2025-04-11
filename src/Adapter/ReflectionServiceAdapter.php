@@ -3,7 +3,6 @@
 namespace PhpPacker\Adapter;
 
 use PhpPacker\Analysis\ReflectionService as AnalysisReflectionService;
-use PhpPacker\Config\Configuration;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -17,10 +16,10 @@ class ReflectionServiceAdapter
     private AnalysisReflectionService $reflectionService;
 
     /**
-     * @param Configuration $config 配置对象
+     * @param ConfigurationAdapter $config 配置对象
      * @param LoggerInterface|null $logger 日志记录器
      */
-    public function __construct(Configuration $config, ?LoggerInterface $logger = null)
+    public function __construct(ConfigurationAdapter $config, ?LoggerInterface $logger = null)
     {
         // 创建新的反射服务实例
         $this->reflectionService = new AnalysisReflectionService($config->getExclude(), $logger);
@@ -51,4 +50,4 @@ class ReflectionServiceAdapter
     {
         return $this->reflectionService;
     }
-} 
+}

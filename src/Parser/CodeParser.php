@@ -2,9 +2,9 @@
 
 namespace PhpPacker\Parser;
 
+use PhpPacker\Adapter\ConfigurationAdapter;
 use PhpPacker\Adapter\DependencyAnalyzerAdapter;
 use PhpPacker\Ast\AstManagerInterface;
-use PhpPacker\Config\Configuration;
 use PhpPacker\Parser\Config\ParserConfig as ExternalParserConfig;
 use Psr\Log\LoggerInterface;
 
@@ -23,7 +23,7 @@ class CodeParser
     /**
      * 配置对象
      */
-    private Configuration $config;
+    private ConfigurationAdapter $config;
 
     /**
      * 日志记录器
@@ -31,13 +31,13 @@ class CodeParser
     private LoggerInterface $logger;
 
     /**
-     * @param Configuration $config 配置对象
+     * @param ConfigurationAdapter $config 配置对象
      * @param LoggerInterface $logger 日志记录器
      * @param DependencyAnalyzerAdapter $dependencyAnalyzer 依赖分析器适配器
      * @param AstManagerInterface $astManager AST管理器
      */
     public function __construct(
-        Configuration $config,
+        ConfigurationAdapter $config,
         LoggerInterface $logger,
         private readonly DependencyAnalyzerAdapter $dependencyAnalyzer,
         private readonly AstManagerInterface $astManager,

@@ -5,7 +5,7 @@ use Composer\InstalledVersions;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
-use PhpPacker\Config\Configuration;
+use PhpPacker\Adapter\ConfigurationAdapter;
 use PhpPacker\Packer;
 use Psr\Log\LoggerInterface;
 
@@ -24,7 +24,7 @@ if ($argc < 2) {
 function createLogger(): LoggerInterface
 {
     $logger = new Logger('packer');
-    
+
     // 添加控制台输出
     $stdoutHandler = new StreamHandler('php://stdout', Logger::DEBUG);
     $consoleFormatter = new LineFormatter(
@@ -46,7 +46,7 @@ function createLogger(): LoggerInterface
     );
     $fileHandler->setFormatter($fileFormatter);
     $logger->pushHandler($fileHandler);
-    
+
     return $logger;
 }
 
@@ -55,7 +55,7 @@ $configFile = $argv[1];
 $logger->info('Starting packer with config file: ' . $configFile);
 
 // 创建配置对象
-$config = new Configuration($configFile, $logger);
+$config = new ConfigurationAdapter($configFile, $logger);
 
 // 创建打包器并执行
 $packer = new Packer($config, $logger);
