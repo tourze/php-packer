@@ -7,7 +7,7 @@
     "monolog/monolog": "^3.0",
     "nikic/php-parser": "^5.3.0",
     "psr/log": "^3|^2|^1",
-    "rector/rector-src": "^2.0",
+    "rector/rector": "^2.0",
     "symfony/stopwatch": "^6.4",
     "tourze/php-packer-ast": "0.0.*",
     "tourze/php-packer-analysis": "0.0.*",
