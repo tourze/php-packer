@@ -27,6 +27,11 @@
       "PhpPacker\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "PhpPacker\\Tests\\": "tests/"
+    }
+  },
   "bin": [
     "bin/php-packer"
   ],
