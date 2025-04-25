@@ -18,8 +18,9 @@
     "yiisoft/json": "^1.0"
   },
   "require-dev": {
+    "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^10.0",
-    "phpstan/phpstan": "^2.1"
+    "shipmonk/composer-dependency-analyser": "^1.8"
   },
   "license": "MIT",
   "autoload": {
@@ -34,8 +35,5 @@
   },
   "bin": [
     "bin/php-packer"
-  ],
-  "scripts": {
-    "phpstan": "phpstan analyse src -l 1"
-  }
+  ]
 }
