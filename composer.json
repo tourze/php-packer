@@ -2,6 +2,7 @@
   "name": "tourze/php-packer",
   "description": "",
   "type": "library",
+  "license": "MIT",
   "require": {
     "php": "^8.1",
     "monolog/monolog": "^3.1",
@@ -9,8 +10,8 @@
     "psr/log": "^3|^2|^1",
     "rector/rector": "^2.0",
     "symfony/stopwatch": "^6.4",
-    "tourze/php-packer-ast": "0.0.*",
     "tourze/php-packer-analysis": "0.0.*",
+    "tourze/php-packer-ast": "0.0.*",
     "tourze/php-packer-config": "0.0.*",
     "tourze/php-packer-generator": "0.0.*",
     "tourze/php-packer-parser": "0.0.*",
@@ -21,7 +22,6 @@
     "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^10.0"
   },
-  "license": "MIT",
   "autoload": {
     "psr-4": {
       "PhpPacker\\": "src/"
