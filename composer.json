@@ -15,8 +15,7 @@
     "tourze/php-packer-config": "0.0.*",
     "tourze/php-packer-generator": "0.0.*",
     "tourze/php-packer-parser": "0.0.*",
-    "tourze/php-packer-resource": "0.0.*",
-    "yiisoft/json": "^1.0"
+    "tourze/php-packer-resource": "0.0.*"
   },
   "require-dev": {
     "phpstan/phpstan": "^2.1",
