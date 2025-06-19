@@ -24,9 +24,9 @@ class DependencyAnalyzerAdapter implements DependencyAnalyzerInterface
      * @param LoggerInterface $logger 日志记录器
      */
     public function __construct(
-        private readonly AstManagerInterface $astManager,
+        AstManagerInterface $astManager,
         ReflectionServiceAdapter $reflectionService,
-        private readonly LoggerInterface $logger
+        LoggerInterface $logger
     ) {
         // 创建访问者工厂
         $visitorFactory = new DefaultVisitorFactory();

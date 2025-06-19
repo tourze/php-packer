@@ -107,7 +107,6 @@ class ConfigurationAdapterTest extends TestCase
         $rawConfig = $adapter->getRaw();
 
         // 验证原始配置数据
-        $this->assertIsArray($rawConfig);
         $this->assertArrayHasKey('entry', $rawConfig);
         $this->assertArrayHasKey('output', $rawConfig);
         $this->assertArrayHasKey('debug', $rawConfig);
