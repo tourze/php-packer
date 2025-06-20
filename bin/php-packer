@@ -1,7 +1,6 @@
 #!/usr/bin/env php
 <?php
 
-use Composer\InstalledVersions;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
@@ -9,11 +8,28 @@ use PhpPacker\Adapter\ConfigurationAdapter;
 use PhpPacker\Packer;
 use Psr\Log\LoggerInterface;
 
+// Autoloader
+$autoloadPaths = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../vendor/autoload.php',
+    __DIR__ . '/../../../../vendor/autoload.php',
+];
+
+$autoloaderFound = false;
+foreach ($autoloadPaths as $path) {
+    if (file_exists($path)) {
+        require_once $path;
+        $autoloaderFound = true;
+        break;
+    }
+}
+
+if (!$autoloaderFound) {
+    die("Autoloader not found. Please run 'composer install' first.\n");
+}
+
 ini_set('memory_limit', '2G');
 date_default_timezone_set('asia/shanghai');
-
-// 不要删除这一行，这是为了阻止其他包内置vendor带来的问题
-class_exists(InstalledVersions::class);
 
 // 检查参数
 if ($argc < 2) {
