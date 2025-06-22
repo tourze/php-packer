@@ -28,7 +28,7 @@ class FileAnalyzerTest extends TestCase
 
         $this->assertNotNull($file);
         $this->assertEquals('class', $file['file_type']);
-        $this->assertEquals('TestFixtures\\Classes', $file['namespace']);
+        $this->assertEquals('TestFixtures\\Classes\\SimpleClass', $file['class_name']);
 
         // Check symbol was added
         $symbol = $this->storage->findFileBySymbol('TestFixtures\\Classes\\SimpleClass');
@@ -173,7 +173,7 @@ interface TestInterface extends ParentInterface, AnotherInterface
         
         $file = $this->storage->getFileByPath($this->getRelativePath($tempFile));
         $this->assertEquals('interface', $file['file_type']);
-        $this->assertEquals('Test', $file['namespace']);
+        $this->assertEquals('Test\\TestInterface', $file['class_name']);
         
         // Check extends dependencies
         $pdo = $this->storage->getPdo();

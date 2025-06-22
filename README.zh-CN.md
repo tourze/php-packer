@@ -11,6 +11,7 @@ PHP单文件打包器 - 将PHP项目打包成单个可执行文件。
 - 处理类继承、接口实现、trait使用
 - 生成优化的引导代码
 - 支持条件依赖和循环依赖检测
+- 模块化命令设计，支持分步操作
 
 ## 安装
 
@@ -20,55 +21,128 @@ composer require tourze/php-packer
 
 ## 使用方法
 
-### 命令行使用
+### 基本工作流程
 
 ```bash
-php vendor/bin/php-packer config.json
+# 1. 分析项目并生成依赖数据库
+php vendor/bin/php-packer analyze src/index.php --database=build/app.db
+
+# 2. 查看分析结果
+php vendor/bin/php-packer files --database=build/app.db --stats
+
+# 3. 查询特定文件的依赖关系
+php vendor/bin/php-packer dependencies src/Application.php --database=build/app.db --tree
+
+# 4. 打包成单个文件
+php vendor/bin/php-packer pack --database=build/app.db --output=dist/app.php
 ```
 
-### 配置文件示例
+### 可用命令
 
-```json
-{
-    "entry": "src/index.php",
-    "output": "dist/packed.php",
-    "database": "build/packer.db",
-    "include_paths": [
-        "src/",
-        "lib/"
-    ],
-    "exclude_patterns": [
-        "**/tests/**",
-        "**/*Test.php"
-    ],
-    "autoload": {
-        "psr-4": {
-            "App\\": "src/"
-        }
-    },
-    "optimization": {
-        "remove_comments": true,
-        "remove_whitespace": false
-    },
-    "runtime": {
-        "error_reporting": "E_ALL",
-        "memory_limit": "256M"
-    }
-}
+#### analyze - 分析PHP项目
+
+分析入口文件并生成依赖数据库。
+
+```bash
+php-packer analyze <entry-file> [options]
+
+选项：
+  --database, -d     数据库文件路径 (默认: ./packer.db)
+  --root-path, -r    项目根目录 (默认: 当前目录)
+  --composer, -c     composer.json 路径 (默认: <root>/composer.json)
+  --autoload         额外的自动加载配置，格式: "psr4:prefix:path"
+  --help, -h         显示帮助信息
+
+示例：
+  php-packer analyze index.php
+  php-packer analyze src/app.php --database=build/myapp.db
+  php-packer analyze index.php --autoload="psr4:MyLib:lib/"
 ```
 
-## 配置说明
+#### dependencies - 查询依赖关系
 
-| 配置项 | 类型 | 必需 | 说明 |
-|--------|------|------|------|
-| entry | string | 是 | 入口文件路径 |
-| output | string | 是 | 输出文件路径 |
-| database | string | 否 | SQLite数据库路径，默认：build/packer.db |
-| include_paths | array | 否 | 包含的目录列表 |
-| exclude_patterns | array | 否 | 排除的文件模式 |
-| autoload | object | 否 | 自定义自动加载规则 |
-| optimization | object | 否 | 优化选项 |
-| runtime | object | 否 | 运行时配置 |
+查询并显示文件的依赖关系。
+
+```bash
+php-packer dependencies <file-path> [options]
+
+选项：
+  --database, -d     数据库文件路径 (默认: ./packer.db)
+  --root-path, -r    项目根目录 (默认: 当前目录)
+  --reverse          显示依赖此文件的文件
+  --tree             以树形结构显示
+  --help, -h         显示帮助信息
+
+示例：
+  php-packer dependencies src/Controller.php
+  php-packer dependencies src/Model.php --reverse
+  php-packer dependencies src/Application.php --tree
+```
+
+#### files - 列出所有文件
+
+列出数据库中的所有文件及其信息。
+
+```bash
+php-packer files [options]
+
+选项：
+  --database, -d     数据库文件路径 (默认: ./packer.db)
+  --root-path, -r    项目根目录 (默认: 当前目录)
+  --type, -t         按类型过滤 (class, trait, interface, script)
+  --stats            仅显示统计信息
+  --entry            仅显示入口文件
+  --sort             排序方式: name, type, size, dependencies (默认: name)
+  --help, -h         显示帮助信息
+
+示例：
+  php-packer files --stats
+  php-packer files --type=class
+  php-packer files --sort=dependencies
+```
+
+#### pack - 打包项目
+
+从数据库读取分析结果并生成打包文件。
+
+```bash
+php-packer pack [options]
+
+选项：
+  --database, -d     数据库文件路径 (默认: ./packer.db)
+  --root-path, -r    项目根目录 (默认: 当前目录)
+  --output, -o       输出文件路径 (默认: ./packed.php)
+  --compression      启用输出压缩 (gzip)
+  --strip-comments   移除代码注释
+  --optimize         启用代码优化
+  --help, -h         显示帮助信息
+
+示例：
+  php-packer pack --output=dist/app.php
+  php-packer pack --strip-comments --optimize
+  php-packer pack --output=app.phar --compression
+```
+
+### 完整示例
+
+打包一个Laravel应用：
+
+```bash
+# 分析
+php-packer analyze public/index.php \
+  --database=build/laravel.db \
+  --root-path=/path/to/laravel
+
+# 查看统计
+php-packer files --database=build/laravel.db --stats
+
+# 打包
+php-packer pack \
+  --database=build/laravel.db \
+  --output=dist/laravel-packed.php \
+  --strip-comments \
+  --optimize
+```
 
 ## 工作原理
 

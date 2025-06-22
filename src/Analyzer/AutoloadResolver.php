@@ -16,6 +16,7 @@ class AutoloadResolver
     private array $psr0Prefixes = [];
     private array $classMap = [];
     private array $files = [];
+    private array $autoloadRules = []; // 存储规则和优先级
 
     public function __construct(SqliteStorage $storage, LoggerInterface $logger, string $rootPath)
     {
@@ -32,9 +33,14 @@ class AutoloadResolver
         }
 
         $composerData = json_decode(file_get_contents($composerJsonPath), true);
-        if (!$composerData) {
+        if (json_last_error() !== JSON_ERROR_NONE) {
             $this->logger->error('Invalid composer.json', ['path' => $composerJsonPath]);
             return;
+        }
+        
+        // Handle empty composer.json gracefully
+        if (!$composerData) {
+            $composerData = [];
         }
 
         $basePath = dirname($composerJsonPath);
@@ -59,6 +65,12 @@ class AutoloadResolver
                 foreach ($paths as $path) {
                     $absolutePath = $this->normalizePath($basePath . '/' . $path);
                     $this->psr4Prefixes[$prefix][] = $absolutePath;
+                    $this->autoloadRules[] = [
+                        'type' => 'psr4',
+                        'prefix' => $prefix,
+                        'path' => $absolutePath,
+                        'priority' => $priority
+                    ];
                     $this->logger->debug('Added PSR-4 prefix', [
                         'prefix' => $prefix,
                         'path' => $absolutePath,
@@ -73,6 +85,12 @@ class AutoloadResolver
                 foreach ($paths as $path) {
                     $absolutePath = $this->normalizePath($basePath . '/' . $path);
                     $this->psr0Prefixes[$prefix][] = $absolutePath;
+                    $this->autoloadRules[] = [
+                        'type' => 'psr0',
+                        'prefix' => $prefix,
+                        'path' => $absolutePath,
+                        'priority' => $priority - 10 // PSR-0 优先级稍低
+                    ];
                 }
             }
         }
@@ -88,6 +106,12 @@ class AutoloadResolver
             foreach ((array) $autoload['files'] as $file) {
                 $absolutePath = $this->normalizePath($basePath . '/' . $file);
                 $this->files[] = $absolutePath;
+                $this->autoloadRules[] = [
+                    'type' => 'files',
+                    'prefix' => null,
+                    'path' => $absolutePath,
+                    'priority' => $priority + 20 // files 优先级最高
+                ];
             }
         }
     }
@@ -220,24 +244,19 @@ class AutoloadResolver
 
     private function saveAutoloadRulesToStorage(): void
     {
-        foreach ($this->psr4Prefixes as $prefix => $paths) {
-            foreach ($paths as $path) {
-                $this->storage->addAutoloadRule('psr4', $path, $prefix, 100);
-            }
+        // 使用收集的规则和它们的优先级
+        foreach ($this->autoloadRules as $rule) {
+            $this->storage->addAutoloadRule(
+                $rule['type'],
+                $rule['path'],
+                $rule['prefix'],
+                $rule['priority']
+            );
         }
 
-        foreach ($this->psr0Prefixes as $prefix => $paths) {
-            foreach ($paths as $path) {
-                $this->storage->addAutoloadRule('psr0', $path, $prefix, 90);
-            }
-        }
-
+        // 添加 classmap 规则
         foreach ($this->classMap as $class => $path) {
             $this->storage->addAutoloadRule('classmap', $path, $class, 110);
-        }
-
-        foreach ($this->files as $file) {
-            $this->storage->addAutoloadRule('files', $file, null, 120);
         }
     }
 
@@ -271,7 +290,7 @@ class AutoloadResolver
                 $relativeClass = str_replace('\\', '/', $relativeClass) . '.php';
 
                 foreach ($paths as $path) {
-                    $file = $path . '/' . $relativeClass;
+                    $file = $this->normalizePath($path . '/' . $relativeClass);
                     if (file_exists($file)) {
                         return $file;
                     }
@@ -285,21 +304,17 @@ class AutoloadResolver
     private function resolvePsr0(string $className): ?string
     {
         $className = ltrim($className, '\\');
-        $fileName = '';
-        $namespace = '';
-
-        if ($lastNsPos = strrpos($className, '\\')) {
-            $namespace = substr($className, 0, $lastNsPos);
-            $className = substr($className, $lastNsPos + 1);
-            $fileName = str_replace('\\', '/', $namespace) . '/';
-        }
-
-        $fileName .= str_replace('_', '/', $className) . '.php';
-
+        
         foreach ($this->psr0Prefixes as $prefix => $paths) {
-            if ($prefix === '' || strpos($namespace, $prefix) === 0) {
+            // 检查类名是否匹配前缀
+            if ($prefix === '' || strpos($className, $prefix) === 0) {
+                // PSR-0: 不移除前缀，整个类名都用于路径
+                $logicalPathPsr0 = strtr($className, '\\', DIRECTORY_SEPARATOR);
+                $logicalPathPsr0 = strtr($logicalPathPsr0, '_', DIRECTORY_SEPARATOR);
+                $logicalPathPsr0 .= '.php';
+
                 foreach ($paths as $path) {
-                    $file = $path . '/' . $fileName;
+                    $file = $this->normalizePath($path . '/' . $logicalPathPsr0);
                     if (file_exists($file)) {
                         return $file;
                     }

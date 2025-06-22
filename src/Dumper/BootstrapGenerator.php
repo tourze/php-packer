@@ -72,13 +72,13 @@ PHP;
     private function getAutoloader(array $files): string
     {
         $classMap = $this->buildClassMap($files);
-        $classMapJson = json_encode($classMap, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        $classMapExport = var_export($classMap, true);
         
         return <<<PHP
 
     // Autoloader
     \$GLOBALS['__PACKED_AUTOLOADER'] = function(\$class) {
-        static \$classMap = $classMapJson;
+        static \$classMap = $classMapExport;
         
         \$class = ltrim(\$class, '\\\\');
         

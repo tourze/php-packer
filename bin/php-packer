@@ -1,12 +1,12 @@
 #!/usr/bin/env php
 <?php
 
-use Monolog\Formatter\LineFormatter;
-use Monolog\Handler\StreamHandler;
-use Monolog\Logger;
-use PhpPacker\Adapter\ConfigurationAdapter;
-use PhpPacker\Packer;
-use Psr\Log\LoggerInterface;
+declare(strict_types=1);
+
+use PhpPacker\Command\AnalyzeCommand;
+use PhpPacker\Command\DependenciesCommand;
+use PhpPacker\Command\FilesCommand;
+use PhpPacker\Command\PackCommand;
 
 // Autoloader
 $autoloadPaths = [
@@ -28,53 +28,82 @@ if (!$autoloaderFound) {
     die("Autoloader not found. Please run 'composer install' first.\n");
 }
 
+// 设置内存限制和时区
 ini_set('memory_limit', '2G');
-date_default_timezone_set('asia/shanghai');
+date_default_timezone_set('Asia/Shanghai');
 
-// 检查参数
+// 可用命令
+$commands = [
+    'analyze' => new AnalyzeCommand(),
+    'dependencies' => new DependenciesCommand(),
+    'files' => new FilesCommand(),
+    'pack' => new PackCommand(),
+];
+
+// 显示帮助
+function showHelp(array $commands): void
+{
+    echo "PHP Packer - Pack PHP applications into single files\n\n";
+    echo "Usage:\n";
+    echo "  php-packer <command> [arguments] [options]\n\n";
+    echo "Available commands:\n";
+    
+    foreach ($commands as $name => $command) {
+        echo sprintf("  %-15s %s\n", $name, $command->getDescription());
+    }
+    
+    echo "\nOptions:\n";
+    echo "  --help, -h     Show help for a specific command\n";
+    echo "  --version, -v  Show version information\n";
+    echo "\nExamples:\n";
+    echo "  php-packer analyze index.php --database=build/app.db\n";
+    echo "  php-packer dependencies src/Application.php --tree\n";
+    echo "  php-packer files --stats\n";
+    echo "  php-packer pack --output=dist/app.php --strip-comments\n";
+}
+
+// 显示版本
+function showVersion(): void
+{
+    $packageFile = dirname(__DIR__) . '/composer.json';
+    if (file_exists($packageFile)) {
+        $package = json_decode(file_get_contents($packageFile), true);
+        $version = $package['version'] ?? 'dev-master';
+    } else {
+        $version = 'unknown';
+    }
+    
+    echo "PHP Packer version $version\n";
+}
+
+// 主程序
 if ($argc < 2) {
-    echo "Usage: php pack.php <config_file>\n";
+    showHelp($commands);
+    exit(0);
+}
+
+// 处理全局选项
+if (in_array($argv[1], ['--help', '-h', 'help'])) {
+    showHelp($commands);
+    exit(0);
+}
+
+if (in_array($argv[1], ['--version', '-v', 'version'])) {
+    showVersion();
+    exit(0);
+}
+
+$commandName = $argv[1];
+
+// 检查命令是否存在
+if (!isset($commands[$commandName])) {
+    echo "Error: Unknown command '$commandName'\n\n";
+    showHelp($commands);
     exit(1);
 }
 
-function createLogger(): LoggerInterface
-{
-    $logger = new Logger('packer');
+// 执行命令
+$command = $commands[$commandName];
+$exitCode = $command->run(array_slice($argv, 2));
 
-    // 添加控制台输出
-    $stdoutHandler = new StreamHandler('php://stdout', Logger::DEBUG);
-    $consoleFormatter = new LineFormatter(
-        dateFormat: 'Y-m-d H:i:s',
-        allowInlineLineBreaks: true
-    );
-    $stdoutHandler->setFormatter($consoleFormatter);
-    $logger->pushHandler($stdoutHandler);
-    
-    // 添加文件日志
-    $fileHandler = new StreamHandler(
-        dirname(__DIR__) . '/var/log/packer.log',
-        Logger::DEBUG
-    );
-    $fileFormatter = new LineFormatter(
-        "[%datetime%] %channel%.%level_name%: %message% %context% %extra%\n",
-        'Y-m-d H:i:s',
-        true
-    );
-    $fileHandler->setFormatter($fileFormatter);
-    $logger->pushHandler($fileHandler);
-
-    return $logger;
-}
-
-$logger = createLogger();
-$configFile = $argv[1];
-$logger->info('Starting packer with config file: ' . $configFile);
-
-// 创建配置对象
-$config = new ConfigurationAdapter($configFile, $logger);
-
-// 创建打包器并执行
-$packer = new Packer($config, $logger);
-$packer->pack();
-
-$logger->info('Packing completed successfully');
+exit($exitCode);

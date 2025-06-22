@@ -227,7 +227,7 @@ class AutoloadResolverTest extends TestCase
 
         $resolvedPath = $this->resolver->resolveClass('Package\\SomeClass');
         $this->assertNotNull($resolvedPath);
-        $this->assertStringContains('vendor/package/name/src/SomeClass.php', $resolvedPath);
+        $this->assertStringContainsString('vendor/package/name/src/SomeClass.php', $resolvedPath);
     }
 
     public function testClassmapScanningWithComplexFile(): void

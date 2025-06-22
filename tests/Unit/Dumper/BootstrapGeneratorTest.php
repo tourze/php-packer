@@ -94,11 +94,11 @@ class BootstrapGeneratorTest extends TestCase
 
         $bootstrap = $this->generator->generate($files, 'index.php');
 
-        // Check classmap contains all symbols
-        $this->assertStringContainsString('"App\\\\ClassA": "__PACKED_OFFSET__0"', $bootstrap);
-        $this->assertStringContainsString('"App\\\\ClassB": "__PACKED_OFFSET__1"', $bootstrap);
-        $this->assertStringContainsString('"App\\\\InterfaceB": "__PACKED_OFFSET__1"', $bootstrap);
-        $this->assertStringContainsString('"App\\\\TraitC": "__PACKED_OFFSET__2"', $bootstrap);
+        // Check classmap contains all symbols (PHP array format)
+        $this->assertStringContainsString("'App\\\\ClassA' => '__PACKED_OFFSET__0'", $bootstrap);
+        $this->assertStringContainsString("'App\\\\ClassB' => '__PACKED_OFFSET__1'", $bootstrap);
+        $this->assertStringContainsString("'App\\\\InterfaceB' => '__PACKED_OFFSET__1'", $bootstrap);
+        $this->assertStringContainsString("'App\\\\TraitC' => '__PACKED_OFFSET__2'", $bootstrap);
     }
 
     public function testGenerateAutoloaderLogic(): void
@@ -131,7 +131,7 @@ class BootstrapGeneratorTest extends TestCase
 
         // Should still generate valid bootstrap
         $this->assertStringContainsString('<?php', $bootstrap);
-        $this->assertStringContainsString('static $classMap = []', $bootstrap);
+        $this->assertStringContainsString('static $classMap = array (', $bootstrap);
     }
 
     public function testNamespaceWrapper(): void
@@ -169,11 +169,11 @@ class BootstrapGeneratorTest extends TestCase
         $files = [['id' => $fileId, 'path' => 'complex.php']];
         $bootstrap = $this->generator->generate($files, 'index.php');
 
-        // All classes should map to same file offset
-        $this->assertStringContainsString('"Root\\\\Class1": "__PACKED_OFFSET__0"', $bootstrap);
-        $this->assertStringContainsString('"Root\\\\Sub\\\\Class2": "__PACKED_OFFSET__0"', $bootstrap);
-        $this->assertStringContainsString('"Root\\\\Sub\\\\Deep\\\\IFace": "__PACKED_OFFSET__0"', $bootstrap);
-        $this->assertStringContainsString('"GlobalClass": "__PACKED_OFFSET__0"', $bootstrap);
+        // All classes should map to same file offset (PHP array format)
+        $this->assertStringContainsString("'Root\\\\Class1' => '__PACKED_OFFSET__0'", $bootstrap);
+        $this->assertStringContainsString("'Root\\\\Sub\\\\Class2' => '__PACKED_OFFSET__0'", $bootstrap);
+        $this->assertStringContainsString("'Root\\\\Sub\\\\Deep\\\\IFace' => '__PACKED_OFFSET__0'", $bootstrap);
+        $this->assertStringContainsString("'GlobalClass' => '__PACKED_OFFSET__0'", $bootstrap);
     }
 
     public function testBootstrapStructure(): void
@@ -192,7 +192,7 @@ class BootstrapGeneratorTest extends TestCase
             'Autoloader',
             'Environment setup',
             'Packed marker',
-            '__PACKED_FILES'
+            '$GLOBALS[\'__PACKED_FILES\'] = []'  // Check actual initialization
         ];
 
         $lastPos = 0;

@@ -182,10 +182,10 @@ echo \'Single quotes\';
 
         $content = file_get_contents($this->outputPath);
 
-        // Variables and quotes should be properly escaped
-        $this->assertStringContainsString('\\$var = \\"test string with \\$variable', $content);
-        $this->assertStringContainsString('\\\\\\"quotes\\\\\\"', $content);
-        $this->assertStringContainsString('\\$heredoc', $content);
+        // Since we use nowdoc, content is not escaped
+        $this->assertStringContainsString('$var = "test string with $variable', $content);
+        $this->assertStringContainsString('and \"quotes\"', $content);
+        $this->assertStringContainsString('$heredoc = <<<EOT', $content);
     }
 
     public function testMinimizeWhitespace(): void
@@ -219,7 +219,7 @@ echo \'Single quotes\';
         // Extra whitespace should be minimized
         $this->assertStringContainsString('class Test{', $content);
         $this->assertStringContainsString('public function method(){', $content);
-        $this->assertStringContainsString('return"test";', $content);
+        $this->assertStringContainsString('return "test";', $content);
     }
 
     public function testMultipleFiles(): void

@@ -156,9 +156,40 @@ class ConfigurationAdapter
 
     private function matchPattern(string $pattern, string $path): bool
     {
-        $pattern = str_replace(['**/', '*', '?'], ['.*', '[^/]*', '.'], $pattern);
-        $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
+        // 标准化路径，统一使用正斜杠
+        $path = str_replace('\\', '/', $path);
         
-        return preg_match($pattern, $path) === 1;
+        // 转换 glob 模式到正则表达式
+        $regex = $this->globToRegex($pattern);
+        
+        return preg_match($regex, $path) === 1;
+    }
+    
+    private function globToRegex(string $pattern): string
+    {
+        $pattern = str_replace('\\', '/', $pattern);
+        
+        // 转义正则表达式特殊字符
+        $pattern = preg_quote($pattern, '/');
+        
+        // 转换 glob 通配符到正则表达式
+        // 注意顺序很重要，先处理更具体的模式
+        $pattern = str_replace([
+            '\*\*\/\*\*',  // **/** -> .*
+            '\*\*\/',      // **/ -> .*
+            '\/\*\*',      // /** -> \/.*
+            '\*\*',        // ** -> .*
+            '\*',          // * -> [^/]*
+            '\?',          // ? -> .
+        ], [
+            '.*',
+            '.*',
+            '\/.*',
+            '.*',
+            '[^\/]*',
+            '.',
+        ], $pattern);
+        
+        return '/^' . $pattern . '$/';
     }
 }

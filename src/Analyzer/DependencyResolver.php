@@ -13,19 +13,23 @@ class DependencyResolver
     private LoggerInterface $logger;
     private AutoloadResolver $autoloadResolver;
     private FileAnalyzer $fileAnalyzer;
+    private string $rootPath;
     private array $resolvedFiles = [];
     private array $processingFiles = [];
+    private array $warnedDependencies = [];
 
     public function __construct(
         SqliteStorage $storage,
         LoggerInterface $logger,
         AutoloadResolver $autoloadResolver,
-        FileAnalyzer $fileAnalyzer
+        FileAnalyzer $fileAnalyzer,
+        ?string $rootPath = null
     ) {
         $this->storage = $storage;
         $this->logger = $logger;
         $this->autoloadResolver = $autoloadResolver;
         $this->fileAnalyzer = $fileAnalyzer;
+        $this->rootPath = $rootPath ?? getcwd();
     }
 
     public function resolveAllDependencies(string $entryFile): void
@@ -79,14 +83,43 @@ class DependencyResolver
 
     private function getRelativePath(string $path): string
     {
-        $rootPath = dirname(dirname(dirname(__DIR__)));
-        $path = realpath($path);
-
-        if (strpos($path, $rootPath) === 0) {
-            return substr($path, strlen($rootPath) + 1);
+        $realPath = realpath($path);
+        if (!$realPath) {
+            return $path; // 如果无法解析，返回原路径
+        }
+        
+        $rootPath = realpath($this->rootPath);
+        if (!$rootPath) {
+            return $path;
+        }
+        
+        // 从根路径计算相对路径
+        if (strpos($realPath, $rootPath) === 0) {
+            return substr($realPath, strlen($rootPath) + 1);
         }
 
-        return $path;
+        return $realPath;
+    }
+
+    private function normalizePath(string $path): string
+    {
+        $path = str_replace('\\', '/', $path);
+        $path = preg_replace('#/+#', '/', $path);
+
+        $parts = explode('/', $path);
+        $absolute = [];
+
+        foreach ($parts as $part) {
+            if ($part === '.') {
+                continue;
+            } elseif ($part === '..') {
+                array_pop($absolute);
+            } else {
+                $absolute[] = $part;
+            }
+        }
+
+        return implode('/', $absolute);
     }
 
     private function resolveDependenciesForFile(int $fileId): void
@@ -140,10 +173,14 @@ class DependencyResolver
         $context = $dependency['context'];
 
         if (!$context || $context === 'dynamic' || $context === 'complex') {
-            $this->logger->warning('Cannot resolve dynamic include', [
-                'source' => $dependency['source_file_id'],
-                'context' => $context,
-            ]);
+            $warningKey = 'include_' . $dependency['id'];
+            if (!isset($this->warnedDependencies[$warningKey])) {
+                $this->logger->warning('Cannot resolve dynamic include', [
+                    'source' => $dependency['source_file_id'],
+                    'context' => $context,
+                ]);
+                $this->warnedDependencies[$warningKey] = true;
+            }
             return null;
         }
 
@@ -153,16 +190,42 @@ class DependencyResolver
         }
 
         $sourceDir = dirname($sourceFile['path']);
+        
+        // 处理 __DIR__ 路径
+        if (str_contains($context, '__DIR__')) {
+            $sourceRealDir = $this->rootPath . '/' . $sourceDir;
+            $resolvedContext = str_replace('__DIR__', $sourceRealDir, $context);
+            $normalizedPath = $this->normalizePath($resolvedContext);
+            if (file_exists($normalizedPath)) {
+                return realpath($normalizedPath);
+            }
+            return null;
+        }
+        
+        // 如果是绝对路径，直接使用
+        if (str_starts_with($context, '/')) {
+            if (file_exists($context)) {
+                return realpath($context);
+            }
+            return null;
+        }
+        
+        // 尝试不同的相对路径解析
         $possiblePaths = [
+            // 相对于源文件目录
+            $this->rootPath . '/' . $sourceDir . '/' . $context,
+            // 相对于根目录
+            $this->rootPath . '/' . $context,
+            // 直接在当前工作目录
             $context,
-            $sourceDir . '/' . $context,
-            getcwd() . '/' . $context,
+            // 相对于源文件的完整路径
+            dirname($this->rootPath . '/' . $sourceFile['path']) . '/' . $context,
         ];
 
         foreach ($possiblePaths as $path) {
-            $realPath = realpath($path);
-            if ($realPath && file_exists($realPath)) {
-                return $realPath;
+            $normalizedPath = $this->normalizePath($path);
+            if (file_exists($normalizedPath)) {
+                return realpath($normalizedPath);
             }
         }
 
@@ -202,10 +265,14 @@ class DependencyResolver
             return $resolvedPath;
         }
 
-        $this->logger->warning('Class not found', [
-            'class' => $symbol,
-            'source' => $dependency['source_file_id'],
-        ]);
+        $warningKey = 'class_' . $dependency['id'];
+        if (!isset($this->warnedDependencies[$warningKey])) {
+            $this->logger->warning('Class not found', [
+                'class' => $symbol,
+                'source' => $dependency['source_file_id'],
+            ]);
+            $this->warnedDependencies[$warningKey] = true;
+        }
 
         return null;
     }
@@ -293,7 +360,10 @@ class DependencyResolver
         $stmt->execute(array_merge($fileIds, $fileIds));
 
         while ($row = $stmt->fetch()) {
-            $graph[$row['source_file_id']][] = $row['target_file_id'];
+            // 对于加载顺序，被依赖的文件应该先加载
+            // 所以图的方向是：target_file 依赖于 source_file
+            // 即：source 必须在 target 之前加载
+            $graph[$row['target_file_id']][] = $row['source_file_id'];
         }
 
         return $graph;

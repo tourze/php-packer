@@ -46,6 +46,9 @@ class CodeDumper
         $entryIndex = $this->findEntryFileIndex($files, $entryFile);
         $content .= $this->generateEntryPoint($entryIndex);
         
+        // Close the namespace block opened in bootstrap
+        $content .= "\n}\n";
+        
         $this->writeOutput($outputPath, $content);
         
         $this->logger->info('Code dump completed', [
@@ -113,21 +116,57 @@ class CodeDumper
 
     private function minimizeWhitespace(string $content): string
     {
-        $content = preg_replace('/\s+/', ' ', $content);
+        // 使用 token_get_all 来安全地压缩代码
+        $tokens = token_get_all('<?php ' . $content);
+        $result = '';
+        $lastToken = null;
         
-        $content = preg_replace('/\s*([{}();,])\s*/', '$1', $content);
+        foreach ($tokens as $token) {
+            if (is_array($token)) {
+                $tokenType = $token[0];
+                $tokenValue = $token[1];
+                
+                // 压缩空白字符为单个空格，但保留字符串内容
+                if ($tokenType === T_WHITESPACE) {
+                    $result .= ' ';
+                } else {
+                    $result .= $tokenValue;
+                }
+            } else {
+                $result .= $token;
+            }
+            
+            $lastToken = $token;
+        }
         
-        return trim($content);
+        // 移除开头的 <?php 
+        $result = preg_replace('/^\s*<\?php\s*/', '', $result);
+        
+        // 清理多余的空格
+        $result = preg_replace('/\s*([{}();,=])\s*/', '$1', $result);
+        $result = preg_replace('/\s+/', ' ', $result);
+        
+        return trim($result);
     }
 
     private function processNamespace(string $content): string
     {
-        if (!preg_match('/^\s*namespace\s+([^;{]+)/', $content, $matches)) {
+        // Check if content starts with namespace declaration
+        if (!preg_match('/^\s*namespace\s+([^;{]+)([;{])/', $content, $matches)) {
+            // No namespace declaration, return as is
             return $content;
         }
         
         $namespace = trim($matches[1]);
-        $content = preg_replace('/^\s*namespace\s+[^;{]+;?\s*/', '', $content);
+        $delimiter = $matches[2];
+        
+        // If it already uses braces, don't wrap it again
+        if ($delimiter === '{') {
+            return $content;
+        }
+        
+        // Convert semicolon-style namespace to brace-style
+        $content = preg_replace('/^\s*namespace\s+[^;]+;\s*/', '', $content);
         
         return "namespace $namespace {\n$content\n}";
     }
@@ -137,22 +176,18 @@ class CodeDumper
         $wrapped = "\n// Packed files\n";
         
         foreach ($packedFiles as $index => $content) {
-            $escapedContent = $this->escapeFileContent($content);
-            $wrapped .= "\$GLOBALS['__PACKED_FILES'][$index] = <<<'__PACKED_EOF__'\n";
-            $wrapped .= $escapedContent;
-            $wrapped .= "\n__PACKED_EOF__;\n\n";
+            // 确保内容不包含结束标记
+            $endMarker = '__PACKED_EOF__';
+            while (strpos($content, $endMarker) !== false) {
+                $endMarker .= '_' . $index;
+            }
+            
+            $wrapped .= "\$GLOBALS['__PACKED_FILES'][$index] = <<<'$endMarker'\n";
+            $wrapped .= $content;  // nowdoc 不需要转义
+            $wrapped .= "\n$endMarker;\n\n";
         }
         
         return $wrapped;
-    }
-
-    private function escapeFileContent(string $content): string
-    {
-        $content = str_replace('\\', '\\\\', $content);
-        
-        $content = str_replace(['$', '"'], ['\\$', '\\"'], $content);
-        
-        return $content;
     }
 
     private function findEntryFileIndex(array $files, string $entryFile): int

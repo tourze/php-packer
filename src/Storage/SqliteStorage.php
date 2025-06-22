@@ -53,6 +53,7 @@ class SqliteStorage
                 hash TEXT,
                 analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 file_type TEXT,
+                class_name TEXT,
                 namespace TEXT,
                 is_entry BOOLEAN DEFAULT 0
             )
@@ -112,13 +113,18 @@ class SqliteStorage
         ');
     }
 
-    public function addFile(string $path, string $content, string $fileType = null, string $namespace = null, bool $isEntry = false): int
+    public function addFile(string $path, string $content, ?string $fileType = null, ?string $className = null, bool $isEntry = false): int
     {
         $hash = hash('sha256', $content);
 
+        // 检查是否已存在文件且为入口文件
+        $existingEntry = $this->getFileByPath($path);
+        $preserveEntryFlag = $existingEntry && $existingEntry['is_entry'];
+        $finalIsEntry = $isEntry || $preserveEntryFlag;
+
         $stmt = $this->pdo->prepare('
-            INSERT OR REPLACE INTO files (path, content, hash, file_type, namespace, is_entry)
-            VALUES (:path, :content, :hash, :file_type, :namespace, :is_entry)
+            INSERT OR REPLACE INTO files (path, content, hash, file_type, class_name, is_entry)
+            VALUES (:path, :content, :hash, :file_type, :class_name, :is_entry)
         ');
 
         $stmt->execute([
@@ -126,8 +132,8 @@ class SqliteStorage
             ':content' => $content,
             ':hash' => $hash,
             ':file_type' => $fileType,
-            ':namespace' => $namespace,
-            ':is_entry' => $isEntry ? 1 : 0,
+            ':class_name' => $className,
+            ':is_entry' => $finalIsEntry ? 1 : 0,
         ]);
 
         return (int) $this->pdo->lastInsertId();
@@ -138,6 +144,15 @@ class SqliteStorage
         $stmt = $this->pdo->prepare('SELECT * FROM files WHERE path = :path');
         $stmt->execute([':path' => $path]);
 
+        $result = $stmt->fetch();
+        return $result ?: null;
+    }
+    
+    public function getFileById(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM files WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        
         $result = $stmt->fetch();
         return $result ?: null;
     }
@@ -355,5 +370,28 @@ class SqliteStorage
     public function getPdo(): PDO
     {
         return $this->pdo;
+    }
+    
+    public function getStatistics(): array
+    {
+        $stats = [];
+        
+        // 总文件数
+        $stmt = $this->pdo->query('SELECT COUNT(*) FROM files');
+        $stats['total_files'] = $stmt->fetchColumn();
+        
+        // 类文件数
+        $stmt = $this->pdo->query('SELECT COUNT(*) FROM files WHERE file_type = "class"');
+        $stats['total_classes'] = $stmt->fetchColumn();
+        
+        // 依赖关系数
+        $stmt = $this->pdo->query('SELECT COUNT(*) FROM dependencies');
+        $stats['total_dependencies'] = $stmt->fetchColumn();
+        
+        // autoload 规则数
+        $stmt = $this->pdo->query('SELECT COUNT(*) FROM autoload_rules');
+        $stats['total_autoload_rules'] = $stmt->fetchColumn();
+        
+        return $stats;
     }
 }

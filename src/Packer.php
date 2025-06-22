@@ -40,6 +40,9 @@ class Packer
         $this->stopwatch->start('initialization');
         
         $databasePath = $this->config->get('database', 'build/packer.db');
+        if (!str_starts_with($databasePath, '/')) {
+            $databasePath = $this->config->getRootPath() . '/' . $databasePath;
+        }
         $this->storage = new SqliteStorage($databasePath, $this->logger);
         
         $rootPath = $this->config->getRootPath();
@@ -51,7 +54,8 @@ class Packer
             $this->storage,
             $this->logger,
             $this->autoloadResolver,
-            $this->fileAnalyzer
+            $this->fileAnalyzer,
+            $rootPath
         );
         
         $this->bootstrapGenerator = new BootstrapGenerator(
@@ -102,6 +106,9 @@ class Packer
             $files = $this->getFilesInLoadOrder($entryFile);
 
             $outputPath = $this->config->get('output', 'packed.php');
+            if (!str_starts_with($outputPath, '/')) {
+                $outputPath = $this->config->getRootPath() . '/' . $outputPath;
+            }
             $this->codeDumper->dump($files, $entryFile, $outputPath);
 
             $event = $this->stopwatch->stop('total');

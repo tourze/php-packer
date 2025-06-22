@@ -34,9 +34,9 @@ class SqliteStorageTest extends TestCase
         $path = 'test/file.php';
         $content = '<?php echo "test";';
         $fileType = 'script';
-        $namespace = 'Test\\Namespace';
+        $className = 'Test\\TestClass';
 
-        $fileId = $this->storage->addFile($path, $content, $fileType, $namespace, true);
+        $fileId = $this->storage->addFile($path, $content, $fileType, $className, true);
 
         $this->assertIsInt($fileId);
         $this->assertGreaterThan(0, $fileId);
@@ -47,7 +47,7 @@ class SqliteStorageTest extends TestCase
         $this->assertEquals($path, $file['path']);
         $this->assertEquals($content, $file['content']);
         $this->assertEquals($fileType, $file['file_type']);
-        $this->assertEquals($namespace, $file['namespace']);
+        $this->assertEquals($className, $file['class_name']);
         $this->assertEquals(1, $file['is_entry']);
         $this->assertEquals(hash('sha256', $content), $file['hash']);
     }
