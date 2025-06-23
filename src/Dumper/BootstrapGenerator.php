@@ -10,13 +10,16 @@ use Psr\Log\LoggerInterface;
 class BootstrapGenerator
 {
     private SqliteStorage $storage;
-    private LoggerInterface $logger;
+    // Removed unused property: logger
     private array $config;
 
+    /**
+     * @phpstan-ignore-next-line constructor.unusedParameter
+     */
     public function __construct(SqliteStorage $storage, LoggerInterface $logger, array $config = [])
     {
         $this->storage = $storage;
-        $this->logger = $logger;
+        // Removed: logger assignment
         $this->config = $config;
     }
 
@@ -111,7 +114,7 @@ PHP;
             ');
             $stmt->execute([':file_id' => $file['id']]);
             
-            while ($symbol = $stmt->fetch()) {
+            while (($symbol = $stmt->fetch()) !== false) {
                 $classMap[$symbol['fqn']] = "__PACKED_OFFSET__$index";
             }
         }

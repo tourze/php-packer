@@ -57,7 +57,7 @@ class FileAnalyzer
             // Build fully qualified class name
             $fullClassName = null;
             if ($className !== null) {
-                $fullClassName = $namespace ? $namespace . '\\' . $className : $className;
+                $fullClassName = $namespace !== null ? $namespace . '\\' . $className : $className;
             }
             
             $fileId = $this->storage->addFile(
@@ -103,7 +103,7 @@ class FileAnalyzer
                 return 'trait';
             } elseif ($node instanceof Node\Stmt\Namespace_) {
                 // 递归检查命名空间内的节点
-                if ($node->stmts) {
+                if (!empty($node->stmts)) {
                     $type = $this->detectFileTypeRecursive($node->stmts);
                     if ($type !== 'script') {
                         return $type;
@@ -124,7 +124,7 @@ class FileAnalyzer
         foreach ($nodes as $node) {
             if (($node instanceof Node\Stmt\Class_ || $node instanceof Node\Stmt\Interface_ || $node instanceof Node\Stmt\Trait_) && $node->name !== null) {
                 return $node->name->toString();
-            } elseif ($node instanceof Node\Stmt\Namespace_ && $node->stmts) {
+            } elseif ($node instanceof Node\Stmt\Namespace_ && !empty($node->stmts)) {
                 $className = $this->extractClassNameRecursive($node->stmts);
                 if ($className !== null) {
                     return $className;
@@ -138,7 +138,7 @@ class FileAnalyzer
     {
         foreach ($ast as $node) {
             if ($node instanceof Node\Stmt\Namespace_) {
-                return $node->name ? $node->name->toString() : null;
+                return $node->name !== null ? $node->name->toString() : null;
             }
         }
         return null;
@@ -161,24 +161,26 @@ class AnalysisVisitor extends NodeVisitorAbstract
     private SqliteStorage $storage;
     private int $fileId;
     private ?string $currentNamespace;
-    private string $filePath;
-    private array $useStatements = [];
+    // Removed unused properties: filePath, useStatements
     private int $symbolCount = 0;
     private int $dependencyCount = 0;
 
+    /**
+     * @phpstan-ignore-next-line constructor.unusedParameter
+     */
     public function __construct(SqliteStorage $storage, int $fileId, ?string $namespace, string $filePath)
     {
         $this->storage = $storage;
         $this->fileId = $fileId;
         $this->currentNamespace = $namespace;
-        $this->filePath = $filePath;
+        // Removed: filePath assignment
     }
 
     public function enterNode(Node $node)
     {
         if ($node instanceof Node\Stmt\Namespace_) {
-            $this->currentNamespace = $node->name ? $node->name->toString() : null;
-            $this->useStatements = [];
+            $this->currentNamespace = $node->name !== null ? $node->name->toString() : null;
+            // Reset use statements tracking
         } elseif ($node instanceof Node\Stmt\Use_) {
             $this->processUseStatement($node);
         } elseif ($node instanceof Node\Stmt\GroupUse) {
@@ -205,7 +207,7 @@ class AnalysisVisitor extends NodeVisitorAbstract
 
     private function processClass(Node\Stmt\Class_ $node): void
     {
-        if (!$node->name) {
+        if ($node->name === null) {
             return;
         }
 
@@ -222,7 +224,7 @@ class AnalysisVisitor extends NodeVisitorAbstract
         );
         $this->symbolCount++;
 
-        if ($node->extends) {
+        if ($node->extends instanceof Node\Name) {
             $fqcn = $node->extends->toString(); // NameResolver 已经处理过了
             $this->storage->addDependency([
                 'source_file_id' => $this->fileId,
@@ -260,7 +262,7 @@ class AnalysisVisitor extends NodeVisitorAbstract
 
     private function buildFqn(string $name): string
     {
-        return $this->currentNamespace ? $this->currentNamespace . '\\' . $name : $name;
+        return $this->currentNamespace !== null ? $this->currentNamespace . '\\' . $name : $name;
     }
 
 
@@ -319,7 +321,7 @@ class AnalysisVisitor extends NodeVisitorAbstract
     private function processFunction(Node\Stmt\Function_ $node): void
     {
         $functionName = $node->name->toString();
-        $fqn = $this->currentNamespace ? $this->currentNamespace . '\\' . $functionName : $functionName;
+        $fqn = $this->currentNamespace !== null ? $this->currentNamespace . '\\' . $functionName : $functionName;
 
         $this->storage->addSymbol(
             $this->fileId,
@@ -354,14 +356,14 @@ class AnalysisVisitor extends NodeVisitorAbstract
         $this->dependencyCount++;
     }
 
-    private function extractIncludeContext(Node\Expr\Include_ $node): ?string
+    private function extractIncludeContext(Node\Expr\Include_ $node): string
     {
         if ($node->expr instanceof Node\Scalar\String_) {
             return $node->expr->value;
         } elseif ($node->expr instanceof Node\Expr\BinaryOp\Concat) {
             // 尝试解析简单的 __DIR__ 连接
             $resolved = $this->resolveConcatExpression($node->expr);
-            return $resolved ?: 'dynamic';
+            return $resolved !== null ? $resolved : 'dynamic';
         }
         return 'complex';
     }
@@ -426,7 +428,7 @@ class AnalysisVisitor extends NodeVisitorAbstract
     private function processAnonymousClass(Node\Stmt\Class_ $class, int $line): void
     {
         // 处理匿名类的继承
-        if ($class->extends) {
+        if ($class->extends !== null) {
             $fqcn = $class->extends->toString(); // NameResolver 已经处理过了
             $this->storage->addDependency([
                 'source_file_id' => $this->fileId,
@@ -477,7 +479,7 @@ class AnalysisVisitor extends NodeVisitorAbstract
             $classNode = $node->class;
         }
 
-        if ($className && !in_array($className, ['self', 'static', 'parent']) && $classNode) {
+        if ($className !== null && !in_array($className, ['self', 'static', 'parent']) && $classNode !== null) {
             $fqcn = $classNode->toString(); // NameResolver 已经处理过了
             $this->storage->addDependency([
                 'source_file_id' => $this->fileId,
@@ -504,8 +506,8 @@ class AnalysisVisitor extends NodeVisitorAbstract
         foreach ($node->uses as $use) {
             if ($use instanceof Node\Stmt\UseUse) {
                 $fullName = $use->name->toString();
-                $alias = $use->alias ? $use->alias->toString() : $use->name->getLast();
-                $this->useStatements[$alias] = $fullName;
+                $alias = $use->alias !== null ? $use->alias->toString() : $use->name->getLast();
+                // Track use statement: $alias => $fullName
                 
                 // 只记录类导入的 use 依赖
                 if ($node->type === Node\Stmt\Use_::TYPE_NORMAL) {
@@ -528,8 +530,8 @@ class AnalysisVisitor extends NodeVisitorAbstract
         foreach ($node->uses as $use) {
             if ($use instanceof Node\Stmt\UseUse) {
                 $fullName = $prefix . '\\' . $use->name->toString();
-                $alias = $use->alias ? $use->alias->toString() : $use->name->getLast();
-                $this->useStatements[$alias] = $fullName;
+                $alias = $use->alias !== null ? $use->alias->toString() : $use->name->getLast();
+                // Track use statement: $alias => $fullName
                 
                 // 只记录类导入的 use 依赖
                 if ($node->type === Node\Stmt\Use_::TYPE_NORMAL) {

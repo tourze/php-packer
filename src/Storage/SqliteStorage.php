@@ -119,7 +119,7 @@ class SqliteStorage
 
         // 检查是否已存在文件且为入口文件
         $existingEntry = $this->getFileByPath($path);
-        $preserveEntryFlag = $existingEntry && $existingEntry['is_entry'];
+        $preserveEntryFlag = !empty($existingEntry) && $existingEntry['is_entry'];
         $finalIsEntry = $isEntry || $preserveEntryFlag;
 
         $stmt = $this->pdo->prepare('
@@ -229,7 +229,7 @@ class SqliteStorage
             $stmt->execute();
             $result = $stmt->fetch();
 
-            if ($result) {
+            if (!empty($result)) {
                 $updateStmt = $this->pdo->prepare('
                     UPDATE analysis_queue SET status = "analyzing" WHERE id = :id
                 ');

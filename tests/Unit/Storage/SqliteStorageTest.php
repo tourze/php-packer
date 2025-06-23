@@ -38,7 +38,7 @@ class SqliteStorageTest extends TestCase
 
         $fileId = $this->storage->addFile($path, $content, $fileType, $className, true);
 
-        $this->assertIsInt($fileId);
+        // $fileId is already typed as int, no need to assert
         $this->assertGreaterThan(0, $fileId);
 
         $file = $this->storage->getFileByPath($path);
@@ -86,7 +86,7 @@ class SqliteStorageTest extends TestCase
             'public'
         );
 
-        $this->assertIsInt($symbolId);
+        // $symbolId is already typed as int, no need to assert
         $this->assertGreaterThan(0, $symbolId);
     }
 
@@ -106,7 +106,7 @@ class SqliteStorageTest extends TestCase
             'context' => 'require "target.php";'
         ]);
 
-        $this->assertIsInt($depId);
+        // $depId is already typed as int, no need to assert
         $this->assertGreaterThan(0, $depId);
     }
 
@@ -122,7 +122,7 @@ class SqliteStorageTest extends TestCase
             'is_resolved' => false
         ]);
 
-        $this->assertIsInt($depId);
+        // $depId is already typed as int, no need to assert
         $this->assertGreaterThan(0, $depId);
     }
 
@@ -272,7 +272,7 @@ class SqliteStorageTest extends TestCase
         $this->storage->beginTransaction();
 
         $fileId = $this->storage->addFile('test.php', '<?php');
-        $this->assertIsInt($fileId);
+        // $fileId is already typed as int, no need to assert
 
         $this->storage->rollback();
 

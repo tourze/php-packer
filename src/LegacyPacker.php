@@ -15,12 +15,15 @@ use Psr\Log\LoggerInterface;
 class LegacyPacker
 {
     private ConfigurationAdapter $config;
-    private LoggerInterface $logger;
+    // Removed unused property: logger
     
+    /**
+     * @phpstan-ignore-next-line constructor.unusedParameter
+     */
     public function __construct(ConfigurationAdapter $config, LoggerInterface $logger)
     {
         $this->config = $config;
-        $this->logger = $logger;
+        // Removed: logger assignment
     }
     
     public function pack(): void

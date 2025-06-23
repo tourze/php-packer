@@ -64,7 +64,7 @@ Options:
             
             // 获取入口文件
             $entryFile = $this->getEntryFile($storage);
-            if (!$entryFile) {
+            if (empty($entryFile)) {
                 $this->logger->error("No entry file found in database");
                 $this->logger->info("Please run 'php-packer analyze' with an entry file first");
                 return 1;
@@ -193,7 +193,7 @@ Options:
             $stmt = $pdo->prepare('SELECT * FROM files WHERE id = :id');
             $stmt->execute([':id' => $fileId]);
             $file = $stmt->fetch(\PDO::FETCH_ASSOC);
-            if ($file) {
+            if (!empty($file)) {
                 $files[] = $file;
             }
         }

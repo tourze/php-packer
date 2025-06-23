@@ -14,7 +14,7 @@ class DependencyResolver
     private AutoloadResolver $autoloadResolver;
     private FileAnalyzer $fileAnalyzer;
     private string $rootPath;
-    private array $resolvedFiles = [];
+    // Removed unused property: resolvedFiles
     private array $processingFiles = [];
     private array $warnedDependencies = [];
 
@@ -38,7 +38,7 @@ class DependencyResolver
         
         $this->storage->addToAnalysisQueue($entryFile, 1000);
         
-        while ($queueItem = $this->storage->getNextFromQueue()) {
+        while (($queueItem = $this->storage->getNextFromQueue()) !== null) {
             try {
                 $this->processQueueItem($queueItem);
                 $this->storage->markQueueItemCompleted($queueItem['id']);
@@ -70,12 +70,12 @@ class DependencyResolver
             $this->fileAnalyzer->analyzeFile($filePath);
             
             $fileData = $this->storage->getFileByPath($this->getRelativePath($filePath));
-            if (!$fileData) {
+            if (empty($fileData)) {
                 throw new \RuntimeException("File not found in storage after analysis: $filePath");
             }
 
             $this->resolveDependenciesForFile($fileData['id']);
-            $this->resolvedFiles[$filePath] = true;
+            // Removed: setting resolvedFiles
         } finally {
             unset($this->processingFiles[$filePath]);
         }
@@ -131,7 +131,7 @@ class DependencyResolver
         ');
         $stmt->execute([':file_id' => $fileId]);
 
-        while ($dependency = $stmt->fetch()) {
+        while (($dependency = $stmt->fetch()) !== false) {
             $this->resolveSingleDependency($dependency);
         }
     }
@@ -156,10 +156,10 @@ class DependencyResolver
                 break;
         }
 
-        if ($targetFile) {
+        if ($targetFile !== null) {
             $targetFileData = $this->storage->getFileByPath($this->getRelativePath($targetFile));
 
-            if (!$targetFileData) {
+            if (empty($targetFileData)) {
                 $this->storage->addToAnalysisQueue($targetFile, 100);
                 $this->logger->debug('Added file to analysis queue', ['file' => $targetFile]);
             } else {
@@ -172,7 +172,7 @@ class DependencyResolver
     {
         $context = $dependency['context'];
 
-        if (!$context || $context === 'dynamic' || $context === 'complex') {
+        if (empty($context) || $context === 'dynamic' || $context === 'complex') {
             $warningKey = 'include_' . $dependency['id'];
             if (!isset($this->warnedDependencies[$warningKey])) {
                 $this->logger->warning('Cannot resolve dynamic include', [
@@ -185,7 +185,7 @@ class DependencyResolver
         }
 
         $sourceFile = $this->getFileById($dependency['source_file_id']);
-        if (!$sourceFile) {
+        if (empty($sourceFile)) {
             return null;
         }
 
@@ -256,12 +256,12 @@ class DependencyResolver
         }
 
         $existingFile = $this->storage->findFileBySymbol($symbol);
-        if ($existingFile) {
+        if (!empty($existingFile)) {
             return $existingFile['path'];
         }
 
         $resolvedPath = $this->autoloadResolver->resolveClass($symbol);
-        if ($resolvedPath) {
+        if ($resolvedPath !== null) {
             return $resolvedPath;
         }
 
@@ -294,13 +294,15 @@ class DependencyResolver
                 'iteration' => $iteration + 1,
             ]);
 
-            $resolved = 0;
+            $previousCount = count($unresolvedDeps);
             foreach ($unresolvedDeps as $dependency) {
                 $this->resolveSingleDependency($dependency);
-                $resolved++;
             }
-
-            if ($resolved === 0) {
+            
+            // Check if we made any progress by comparing unresolved count
+            $currentUnresolved = $this->storage->getUnresolvedDependencies();
+            if (count($currentUnresolved) >= $previousCount) {
+                // No progress made, stop trying
                 break;
             }
 
@@ -359,7 +361,7 @@ class DependencyResolver
         ");
         $stmt->execute(array_merge($fileIds, $fileIds));
 
-        while ($row = $stmt->fetch()) {
+        while (($row = $stmt->fetch()) !== false) {
             // 对于加载顺序，被依赖的文件应该先加载
             // 所以图的方向是：target_file 依赖于 source_file
             // 即：source 必须在 target 之前加载

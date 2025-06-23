@@ -9,18 +9,21 @@ use Psr\Log\LoggerInterface;
 
 class CodeDumper
 {
-    private SqliteStorage $storage;
+    // Removed unused property: storage
     private LoggerInterface $logger;
     private BootstrapGenerator $bootstrapGenerator;
     private array $config;
 
+    /**
+     * @phpstan-ignore-next-line constructor.unusedParameter
+     */
     public function __construct(
         SqliteStorage $storage,
         LoggerInterface $logger,
         BootstrapGenerator $bootstrapGenerator,
         array $config = []
     ) {
-        $this->storage = $storage;
+        // Removed: storage assignment
         $this->logger = $logger;
         $this->bootstrapGenerator = $bootstrapGenerator;
         $this->config = $config;

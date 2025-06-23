@@ -60,7 +60,7 @@ Options:
             
             // 获取文件信息
             $fileData = $storage->getFileByPath($filePath);
-            if (!$fileData) {
+            if (empty($fileData)) {
                 $this->logger->error("File not found in database: $filePath");
                 return 1;
             }
@@ -100,7 +100,7 @@ Options:
         } else {
             foreach ($dependencies as $dep) {
                 $sourceFile = $storage->getFileById($dep['source_file_id']);
-                if ($sourceFile) {
+                if (!empty($sourceFile)) {
                     $this->logger->info("  ← {$sourceFile['path']} [{$dep['dependency_type']}]");
                 }
             }
@@ -130,7 +130,7 @@ Options:
 
         foreach ($dependencies as $dep) {
             $sourceFile = $storage->getFileById($dep['source_file_id']);
-            if ($sourceFile) {
+            if (!empty($sourceFile)) {
                 $indent = str_repeat('  ', $level + 1);
                 $this->logger->info("{$indent}← {$sourceFile['path']} [{$dep['dependency_type']}]");
 
@@ -156,7 +156,7 @@ Options:
         } else {
             foreach ($dependencies as $dep) {
                 $targetFile = $storage->getFileById($dep['target_file_id']);
-                if ($targetFile) {
+                if (!empty($targetFile)) {
                     $this->logger->info("  → {$targetFile['path']} [{$dep['dependency_type']}]");
                 }
             }
@@ -186,7 +186,7 @@ Options:
 
         foreach ($dependencies as $dep) {
             $targetFile = $storage->getFileById($dep['target_file_id']);
-            if ($targetFile) {
+            if (!empty($targetFile)) {
                 $indent = str_repeat('  ', $level + 1);
                 $this->logger->info("{$indent}→ {$targetFile['path']} [{$dep['dependency_type']}]");
 

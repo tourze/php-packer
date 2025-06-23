@@ -11,18 +11,21 @@ class AutoloadResolver
 {
     private SqliteStorage $storage;
     private LoggerInterface $logger;
-    private string $rootPath;
+    // Removed unused property: rootPath
     private array $psr4Prefixes = [];
     private array $psr0Prefixes = [];
     private array $classMap = [];
     private array $files = [];
     private array $autoloadRules = []; // 存储规则和优先级
 
+    /**
+     * @phpstan-ignore-next-line constructor.unusedParameter
+     */
     public function __construct(SqliteStorage $storage, LoggerInterface $logger, string $rootPath)
     {
         $this->storage = $storage;
         $this->logger = $logger;
-        $this->rootPath = rtrim($rootPath, '/');
+        // $rootPath parameter kept for backward compatibility
     }
 
     public function loadComposerAutoload(string $composerJsonPath): void
@@ -39,7 +42,7 @@ class AutoloadResolver
         }
         
         // Handle empty composer.json gracefully
-        if (!$composerData) {
+        if (empty($composerData)) {
             $composerData = [];
         }
 
@@ -170,8 +173,8 @@ class AutoloadResolver
                 $namespace = $this->getNamespaceFromTokens($tokens, $i);
             } elseif (in_array($tokens[$i][0], [T_CLASS, T_INTERFACE, T_TRAIT], true)) {
                 $className = $this->getClassNameFromTokens($tokens, $i);
-                if ($className) {
-                    $fqn = $namespace ? $namespace . '\\' . $className : $className;
+                if ($className !== null) {
+                    $fqn = $namespace !== '' ? $namespace . '\\' . $className : $className;
                     $this->classMap[$fqn] = $filePath;
                 }
             }
@@ -226,7 +229,7 @@ class AutoloadResolver
         }
 
         $installedData = json_decode(file_get_contents($installedJsonPath), true);
-        if (!$installedData) {
+        if (empty($installedData)) {
             return;
         }
 
@@ -269,12 +272,12 @@ class AutoloadResolver
         }
 
         $file = $this->resolvePsr4($className);
-        if ($file && file_exists($file)) {
+        if ($file !== null && file_exists($file)) {
             return $file;
         }
 
         $file = $this->resolvePsr0($className);
-        if ($file && file_exists($file)) {
+        if ($file !== null && file_exists($file)) {
             return $file;
         }
 

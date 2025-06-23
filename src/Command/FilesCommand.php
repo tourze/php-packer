@@ -96,7 +96,7 @@ Options:
         ');
         
         $this->logger->info("\nFiles by type:");
-        while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
+        while (($row = $stmt->fetch(\PDO::FETCH_ASSOC)) !== false) {
             $this->logger->info("  {$row['file_type']}: {$row['count']}");
         }
     }
@@ -108,7 +108,7 @@ Options:
         $sql = 'SELECT * FROM files WHERE 1=1';
         $params = [];
         
-        if ($typeFilter) {
+        if ($typeFilter !== null) {
             $sql .= ' AND file_type = :type';
             $params[':type'] = $typeFilter;
         }

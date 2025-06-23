@@ -342,11 +342,8 @@ function getVersion(): string {
 
         // Execute should work based on current PHP version
         $output = $this->executePhp($this->tempDir . '/packed.php');
-        if (PHP_VERSION_ID >= 80000) {
-            $this->assertEquals("Running on PHP 8+\n", $output);
-        } else {
-            $this->assertEquals("Running on PHP 7\n", $output);
-        }
+        // Since we require PHP 8.1+, this will always be true
+        $this->assertEquals("Running on PHP 8+\n", $output);
     }
 
     public function testPackEmptyProject(): void

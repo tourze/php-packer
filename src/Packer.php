@@ -82,7 +82,7 @@ class Packer
     {
         $units = ['B', 'KB', 'MB', 'GB'];
         $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = floor(($bytes > 0 ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
         $bytes /= (1 << (10 * $pow));
 
@@ -215,7 +215,7 @@ class Packer
     private function getFilesInLoadOrder(string $entryFile): array
     {
         $entryData = $this->storage->getFileByPath($this->getRelativePath($entryFile));
-        if (!$entryData) {
+        if (empty($entryData)) {
             throw new \RuntimeException('Entry file not found in storage');
         }
 
