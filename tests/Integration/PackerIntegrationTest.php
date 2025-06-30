@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace PhpPacker\Tests\Integration;
 
 use PhpPacker\Adapter\ConfigurationAdapter;
-use PhpPacker\LegacyPacker as Packer;
+use PhpPacker\Packer;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 

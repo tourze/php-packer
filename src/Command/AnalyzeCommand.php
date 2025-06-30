@@ -97,14 +97,25 @@ Options:
                 $this->processAdditionalAutoload($storage, $options['autoload']);
             }
 
-            // 标记入口文件
-            $content = file_get_contents($entryFile);
-            $relativePath = $this->getRelativePath($entryFile, $rootPath);
-            $storage->addFile($relativePath, (string)$content, 'script', null, true);
+            // 扫描vendor目录和其他可能的依赖文件
+            $this->scanVendorDirectory($fileAnalyzer, $rootPath);
 
             // 分析依赖
             $this->logger->info("Resolving dependencies...");
             $dependencyResolver->resolveAllDependencies($entryFile);
+
+            // 确保入口文件被标记为入口
+            $relativePath = $this->getRelativePath($entryFile, $rootPath);
+            $existingFile = $storage->getFileByPath($relativePath);
+            if ($existingFile !== null) {
+                // 更新现有文件，标记为入口文件
+                $pdo = $storage->getPdo();
+                $stmt = $pdo->prepare('UPDATE files SET is_entry = 1 WHERE id = :id');
+                $stmt->execute([':id' => $existingFile['id']]);
+                $this->logger->info("Marked entry file: {$relativePath}");
+            } else {
+                $this->logger->error("Entry file not found in database after analysis: {$relativePath}");
+            }
 
             // 统计信息
             $stats = $storage->getStatistics();
@@ -140,6 +151,65 @@ Options:
                 $this->logger->info("Added PSR-4 autoload: $prefix => $path");
             }
         }
+    }
+
+    private function scanVendorDirectory(FileAnalyzer $fileAnalyzer, string $rootPath): void
+    {
+        // 尝试多个可能的vendor目录位置
+        $possibleVendorPaths = [
+            $rootPath . '/vendor',
+            $rootPath . '/../vendor',
+            $rootPath . '/../../vendor',
+            dirname(dirname(dirname($rootPath))) . '/vendor',
+        ];
+        
+        $vendorPath = null;
+        foreach ($possibleVendorPaths as $path) {
+            if (is_dir($path)) {
+                $vendorPath = realpath($path);
+                break;
+            }
+        }
+        
+        if (!$vendorPath) {
+            $this->logger->info("Vendor directory not found, skipping vendor scan");
+            return;
+        }
+
+        $this->logger->info("Scanning vendor directory for dependencies...", ['vendor_path' => $vendorPath]);
+        
+        // 专注于workerman相关的文件
+        $workermanPath = $vendorPath . '/workerman/workerman/src';
+        if (is_dir($workermanPath)) {
+            $this->scanDirectoryRecursively($fileAnalyzer, $workermanPath, '*.php');
+        }
+    }
+
+    private function scanDirectoryRecursively(FileAnalyzer $fileAnalyzer, string $directory, string $pattern): void
+    {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS)
+        );
+
+        $count = 0;
+        foreach ($iterator as $file) {
+            if ($file->isFile() && fnmatch($pattern, $file->getFilename())) {
+                try {
+                    $fileAnalyzer->analyzeFile($file->getPathname());
+                    $count++;
+                    
+                    if ($count % 10 === 0) {
+                        $this->logger->info("Scanned $count files...");
+                    }
+                } catch (\Exception $e) {
+                    $this->logger->warning("Failed to analyze file: " . $file->getPathname(), [
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        }
+        
+        $this->logger->info("Scanned $count files from $directory");
     }
 
     private function getRelativePath(string $path, string $rootPath): string

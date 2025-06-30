@@ -267,17 +267,27 @@ class AutoloadResolver
     {
         $className = ltrim($className, '\\');
 
+        $this->logger->debug('Resolving class via autoloader', [
+            'class' => $className,
+            'classMap' => count($this->classMap),
+            'psr4' => count($this->psr4Prefixes),
+            'psr0' => count($this->psr0Prefixes)
+        ]);
+
         if (isset($this->classMap[$className])) {
+            $this->logger->debug('Found in class map', ['class' => $className, 'file' => $this->classMap[$className]]);
             return $this->classMap[$className];
         }
 
         $file = $this->resolvePsr4($className);
         if ($file !== null && file_exists($file)) {
+            $this->logger->debug('Found via PSR-4', ['class' => $className, 'file' => $file]);
             return $file;
         }
 
         $file = $this->resolvePsr0($className);
         if ($file !== null && file_exists($file)) {
+            $this->logger->debug('Found via PSR-0', ['class' => $className, 'file' => $file]);
             return $file;
         }
 

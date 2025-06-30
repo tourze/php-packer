@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace PhpPacker\Adapter;
 
+use PhpPacker\Exception\ConfigurationException;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 
 class ConfigurationAdapter
 {
@@ -25,18 +25,18 @@ class ConfigurationAdapter
     private function loadConfiguration(): void
     {
         if (!file_exists($this->configPath)) {
-            throw new RuntimeException("Configuration file not found: {$this->configPath}");
+            throw new ConfigurationException("Configuration file not found: {$this->configPath}");
         }
 
         $content = file_get_contents($this->configPath);
         if ($content === false) {
-            throw new RuntimeException("Failed to read configuration file: {$this->configPath}");
+            throw new ConfigurationException("Failed to read configuration file: {$this->configPath}");
         }
 
         $extension = pathinfo($this->configPath, PATHINFO_EXTENSION);
         
         if ($extension !== 'json') {
-            throw new RuntimeException("Only JSON configuration files are supported. Got: $extension");
+            throw new ConfigurationException("Only JSON configuration files are supported. Got: $extension");
         }
 
         $this->config = $this->parseJson($content);
@@ -49,7 +49,7 @@ class ConfigurationAdapter
         $config = json_decode($content, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new RuntimeException('Invalid JSON configuration: ' . json_last_error_msg());
+            throw new ConfigurationException('Invalid JSON configuration: ' . json_last_error_msg());
         }
         
         return $config;
@@ -61,7 +61,7 @@ class ConfigurationAdapter
         
         foreach ($required as $field) {
             if (!isset($this->config[$field])) {
-                throw new RuntimeException("Required configuration field missing: $field");
+                throw new ConfigurationException("Required configuration field missing: $field");
             }
         }
 
@@ -117,6 +117,11 @@ class ConfigurationAdapter
             return $this->rootPath . '/' . ltrim($path, '/');
         }, $paths);
     }
+    
+    public function getIncludePatterns(): array
+    {
+        return $this->get('include', []);
+    }
 
     public function get(string $key, $default = null)
     {
@@ -146,12 +151,8 @@ class ConfigurationAdapter
 
     public function getExcludePatterns(): array
     {
-        return $this->get('exclude_patterns', [
-            '**/tests/**',
-            '**/Tests/**',
-            '**/*Test.php',
-            '**/vendor/**',
-        ]);
+        // Use 'exclude' from config, not 'exclude_patterns' with defaults that exclude vendor
+        return $this->get('exclude', []);
     }
 
     private function matchPattern(string $pattern, string $path): bool

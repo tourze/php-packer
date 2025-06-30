@@ -121,26 +121,11 @@ class Service {}
         $cId = $this->storage->addFile('c.php', '<?php');
 
         // Add dependencies
-        $this->storage->addDependency([
-            'source_file_id' => $entryId,
-            'target_file_id' => $aId,
-            'dependency_type' => 'require',
-            'is_resolved' => true
-        ]);
+        $this->storage->addDependency($entryId, 'require', null);
 
-        $this->storage->addDependency([
-            'source_file_id' => $aId,
-            'target_file_id' => $bId,
-            'dependency_type' => 'require',
-            'is_resolved' => true
-        ]);
+        $this->storage->addDependency($aId, 'require', null);
 
-        $this->storage->addDependency([
-            'source_file_id' => $bId,
-            'target_file_id' => $cId,
-            'dependency_type' => 'require',
-            'is_resolved' => true
-        ]);
+        $this->storage->addDependency($bId, 'require', null);
 
         $loadOrder = $this->resolver->getLoadOrder($entryId);
 
@@ -270,12 +255,7 @@ $obj = new SomeClass();
     {
         // Create file with unresolvable dependency
         $fileId = $this->storage->addFile('test.php', '<?php');
-        $this->storage->addDependency([
-            'source_file_id' => $fileId,
-            'dependency_type' => 'use_class',
-            'target_symbol' => 'Unresolvable\\SomeClass',
-            'is_resolved' => false
-        ]);
+        $this->storage->addDependency($fileId, 'use_class', 'Unresolvable\\SomeClass');
 
         // Set up entry file
         $entryFile = $this->createFile('entry.php', '<?php');
@@ -313,12 +293,7 @@ $obj = new SomeClass();
         ];
 
         foreach ($deps as [$source, $target]) {
-            $this->storage->addDependency([
-                'source_file_id' => $fileIds[$source],
-                'target_file_id' => $fileIds[$target],
-                'dependency_type' => 'require',
-                'is_resolved' => true
-            ]);
+            $this->storage->addDependency($fileIds[$source], 'require', null);
         }
 
         $loadOrder = $this->resolver->getLoadOrder($fileIds['entry']);
