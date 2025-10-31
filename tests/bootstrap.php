@@ -18,7 +18,7 @@ foreach ($autoloadPaths as $path) {
 }
 
 if (!$autoloaderFound) {
-    die("Autoloader not found. Please run 'composer install' first.\n");
+    exit("Autoloader not found. Please run 'composer install' first.\n");
 }
 
 // Set up test environment
@@ -27,6 +27,9 @@ error_reporting(E_ALL);
 
 // Clean up test databases
 $testDbPattern = sys_get_temp_dir() . '/php-packer-test-*.db';
-foreach (glob($testDbPattern) as $file) {
-    @unlink($file);
+$testDbFiles = glob($testDbPattern);
+if (false !== $testDbFiles) {
+    foreach ($testDbFiles as $file) {
+        @unlink($file);
+    }
 }

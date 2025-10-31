@@ -1,6 +1,33 @@
 # php-packer
 
+[![PHP Version](https://img.shields.io/badge/php-%5E8.1-777BB4?style=flat-square)](https://php.net/)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/tourze/php-monorepo/test.yml?branch=master&style=flat-square)](https://github.com/tourze/php-monorepo/actions)
+[![Code Coverage](https://img.shields.io/codecov/c/github/tourze/php-monorepo?style=flat-square)](https://codecov.io/gh/tourze/php-monorepo)
+
+[English](README.md) | [中文](README.zh-CN.md)
+
 PHP单文件打包器 - 将PHP项目打包成单个可执行文件。
+
+## 目录
+
+- [功能特性](#功能特性)
+- [安装](#安装)
+- [使用方法](#使用方法)
+  - [基本工作流程](#基本工作流程)
+- [可用命令](#可用命令)
+  - [analyze - 分析PHP项目](#analyze-分析php项目)
+  - [dependencies - 查询依赖关系](#dependencies-查询依赖关系)
+  - [files - 列出所有文件](#files-列出所有文件)
+  - [pack - 打包项目](#pack-打包项目)
+  - [完整示例](#完整示例)
+- [配置选项](#配置选项)
+- [工作原理](#工作原理)
+- [示例](#示例)
+- [高级用法](#高级用法)
+- [限制](#限制)
+- [开发](#开发)
+- [许可证](#许可证)
 
 ## 功能特性
 
@@ -37,9 +64,9 @@ php vendor/bin/php-packer dependencies src/Application.php --database=build/app.
 php vendor/bin/php-packer pack --database=build/app.db --output=dist/app.php
 ```
 
-### 可用命令
+## 可用命令
 
-#### analyze - 分析PHP项目
+### analyze - 分析PHP项目
 
 分析入口文件并生成依赖数据库。
 
@@ -59,7 +86,7 @@ php-packer analyze <entry-file> [options]
   php-packer analyze index.php --autoload="psr4:MyLib:lib/"
 ```
 
-#### dependencies - 查询依赖关系
+### dependencies - 查询依赖关系
 
 查询并显示文件的依赖关系。
 
@@ -79,7 +106,7 @@ php-packer dependencies <file-path> [options]
   php-packer dependencies src/Application.php --tree
 ```
 
-#### files - 列出所有文件
+### files - 列出所有文件
 
 列出数据库中的所有文件及其信息。
 
@@ -101,7 +128,7 @@ php-packer files [options]
   php-packer files --sort=dependencies
 ```
 
-#### pack - 打包项目
+### pack - 打包项目
 
 从数据库读取分析结果并生成打包文件。
 
@@ -147,27 +174,92 @@ php-packer pack \
 ## 工作原理
 
 1. **初始化阶段**
-   - 创建SQLite数据库
-   - 加载composer.json中的自动加载规则
-   - 解析配置文件
+    - 创建SQLite数据库
+    - 加载composer.json中的自动加载规则
+    - 解析配置文件
 
 2. **分析阶段**
-   - 从入口文件开始分析
-   - 使用PHP Parser解析AST
-   - 提取所有依赖关系
-   - 迭代分析所有相关文件
+    - 从入口文件开始分析
+    - 使用PHP Parser解析AST
+    - 提取所有依赖关系
+    - 迭代分析所有相关文件
 
 3. **解析阶段**
-   - 构建依赖图
-   - 解析符号引用
-   - 检测循环依赖
-   - 确定文件加载顺序
+    - 构建依赖图
+    - 解析符号引用
+    - 检测循环依赖
+    - 确定文件加载顺序
 
 4. **打包阶段**
-   - 生成引导代码
-   - 按依赖顺序合并文件
-   - 优化输出代码
-   - 生成单个PHP文件
+    - 生成引导代码
+    - 按依赖顺序合并文件
+    - 优化输出代码
+    - 生成单个PHP文件
+
+## 配置选项
+
+打包器可以通过多种选项进行配置：
+
+### 数据库选项
+- `--database, -d`: 指定SQLite数据库文件路径
+- 默认值: `./packer.db`
+
+### 路径选项
+- `--root-path, -r`: 设置项目根目录
+- `--composer, -c`: 指定composer.json文件位置
+- `--autoload`: 添加自定义自动加载规则，格式为 "psr4:prefix:path"
+
+### 输出选项
+- `--output`: 指定打包结果的输出文件路径
+- `--strip-comments`: 从打包文件中移除注释
+- `--optimize`: 启用代码优化
+
+### 配置示例
+```bash
+php-packer analyze src/app.php \
+  --database=build/app.db \
+  --root-path=/path/to/project \
+  --composer=composer.json \
+  --autoload="psr4:MyApp\\:src/"
+```
+
+## 高级用法
+
+### 自定义自动加载
+
+您可以添加自定义的PSR-4或PSR-0自动加载规则：
+
+```bash
+php-packer analyze src/app.php \
+  --autoload="psr4:Custom\\Namespace\\:custom/src/" \
+  --autoload="psr0:Legacy_:legacy/lib/"
+```
+
+### 优化选项
+
+在打包过程中启用各种优化：
+
+```bash
+php-packer pack \
+  --database=build/app.db \
+  --output=dist/optimized-app.php \
+  --strip-comments \
+  --optimize
+```
+
+### 依赖分析
+
+查询和分析依赖关系进行调试：
+
+```bash
+# 显示特定文件的依赖关系树
+php-packer dependencies src/Controller/HomeController.php \
+  --database=build/app.db \
+  --tree
+
+# 列出所有文件及统计信息
+php-packer files --database=build/app.db --stats
+```
 
 ## 示例
 
@@ -198,3 +290,7 @@ vendor/bin/phpunit
 ```bash
 vendor/bin/phpstan analyse src/
 ```
+
+## 许可证
+
+MIT

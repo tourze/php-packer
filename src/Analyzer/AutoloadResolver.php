@@ -10,13 +10,23 @@ use Psr\Log\LoggerInterface;
 class AutoloadResolver
 {
     private SqliteStorage $storage;
+
     private LoggerInterface $logger;
-    // Removed unused property: rootPath
-    private array $psr4Prefixes = [];
-    private array $psr0Prefixes = [];
+
+    private ComposerConfigParser $configParser;
+
+    private ClassScanner $classScanner;
+
+    private PsrResolver $psrResolver;
+
+    /** @var array<string, string> */
     private array $classMap = [];
+
+    /** @var array<string> */
     private array $files = [];
-    private array $autoloadRules = []; // 存储规则和优先级
+
+    /** @var array<array{type: string, prefix: string|null, path: string, priority: int}> */
+    private array $autoloadRules = [];
 
     /**
      * @phpstan-ignore-next-line constructor.unusedParameter
@@ -26,222 +36,158 @@ class AutoloadResolver
         $this->storage = $storage;
         $this->logger = $logger;
         // $rootPath parameter kept for backward compatibility
+
+        // 创建助手类实例
+        $this->configParser = new ComposerConfigParser($logger);
+        $this->classScanner = new ClassScanner();
+        $this->psrResolver = new PsrResolver($logger, $this->configParser);
     }
 
     public function loadComposerAutoload(string $composerJsonPath): void
     {
-        if (!file_exists($composerJsonPath)) {
-            $this->logger->warning('Composer.json not found', ['path' => $composerJsonPath]);
+        $composerData = $this->configParser->parseComposerConfig($composerJsonPath);
+        if ([] === $composerData) {
             return;
-        }
-
-        $composerData = json_decode(file_get_contents($composerJsonPath), true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->logger->error('Invalid composer.json', ['path' => $composerJsonPath]);
-            return;
-        }
-        
-        // Handle empty composer.json gracefully
-        if (empty($composerData)) {
-            $composerData = [];
         }
 
         $basePath = dirname($composerJsonPath);
 
-        if (isset($composerData['autoload'])) {
-            $this->processAutoloadSection($composerData['autoload'], $basePath, 100);
+        if (isset($composerData['autoload']) && is_array($composerData['autoload'])) {
+            $autoload = $this->ensureStringKeys($composerData['autoload']);
+            $this->processAutoloadSection($autoload, $basePath, 100);
         }
 
-        if (isset($composerData['autoload-dev'])) {
-            $this->processAutoloadSection($composerData['autoload-dev'], $basePath, 50);
+        if (isset($composerData['autoload-dev']) && is_array($composerData['autoload-dev'])) {
+            $autoloadDev = $this->ensureStringKeys($composerData['autoload-dev']);
+            $this->processAutoloadSection($autoloadDev, $basePath, 50);
         }
 
         $this->loadVendorAutoload($basePath);
         $this->saveAutoloadRulesToStorage();
     }
 
+    /** @param array<string, mixed> $autoload */
     private function processAutoloadSection(array $autoload, string $basePath, int $priority): void
     {
-        if (isset($autoload['psr-4'])) {
-            foreach ($autoload['psr-4'] as $prefix => $paths) {
-                $paths = (array) $paths;
-                foreach ($paths as $path) {
-                    $absolutePath = $this->normalizePath($basePath . '/' . $path);
-                    $this->psr4Prefixes[$prefix][] = $absolutePath;
-                    $this->autoloadRules[] = [
-                        'type' => 'psr4',
-                        'prefix' => $prefix,
-                        'path' => $absolutePath,
-                        'priority' => $priority
-                    ];
-                    $this->logger->debug('Added PSR-4 prefix', [
-                        'prefix' => $prefix,
-                        'path' => $absolutePath,
-                    ]);
+        $this->processPsr4Autoload($autoload, $basePath, $priority);
+        $this->processPsr0Autoload($autoload, $basePath, $priority);
+        $this->processClassmapAutoload($autoload, $basePath);
+        $this->processFilesAutoload($autoload, $basePath, $priority);
+    }
+
+    /** @param array<string, mixed> $autoload */
+    private function processPsr4Autoload(array $autoload, string $basePath, int $priority): void
+    {
+        if (!isset($autoload['psr-4']) || !is_array($autoload['psr-4'])) {
+            return;
+        }
+
+        /** @var array<string, mixed> $psr4Config */
+        $psr4Config = $autoload['psr-4'];
+        foreach ($psr4Config as $prefix => $paths) {
+            if (!is_string($prefix)) {
+                continue;
+            }
+            $paths = (array) $paths;
+            foreach ($paths as $path) {
+                if (!is_string($path)) {
+                    continue;
                 }
-            }
-        }
-
-        if (isset($autoload['psr-0'])) {
-            foreach ($autoload['psr-0'] as $prefix => $paths) {
-                $paths = (array) $paths;
-                foreach ($paths as $path) {
-                    $absolutePath = $this->normalizePath($basePath . '/' . $path);
-                    $this->psr0Prefixes[$prefix][] = $absolutePath;
-                    $this->autoloadRules[] = [
-                        'type' => 'psr0',
-                        'prefix' => $prefix,
-                        'path' => $absolutePath,
-                        'priority' => $priority - 10 // PSR-0 优先级稍低
-                    ];
-                }
-            }
-        }
-
-        if (isset($autoload['classmap'])) {
-            foreach ((array) $autoload['classmap'] as $path) {
-                $absolutePath = $this->normalizePath($basePath . '/' . $path);
-                $this->scanClassMap($absolutePath);
-            }
-        }
-
-        if (isset($autoload['files'])) {
-            foreach ((array) $autoload['files'] as $file) {
-                $absolutePath = $this->normalizePath($basePath . '/' . $file);
-                $this->files[] = $absolutePath;
+                $absolutePath = $this->configParser->normalizePath($basePath . '/' . $path);
+                $this->psrResolver->addPsr4Prefix($prefix, $absolutePath);
                 $this->autoloadRules[] = [
-                    'type' => 'files',
-                    'prefix' => null,
+                    'type' => 'psr4',
+                    'prefix' => $prefix,
                     'path' => $absolutePath,
-                    'priority' => $priority + 20 // files 优先级最高
+                    'priority' => $priority,
                 ];
             }
         }
     }
 
-    private function normalizePath(string $path): string
+    /** @param array<string, mixed> $autoload */
+    private function processPsr0Autoload(array $autoload, string $basePath, int $priority): void
     {
-        $path = str_replace('\\', '/', $path);
-        $path = preg_replace('#/+#', '/', $path);
-
-        $parts = explode('/', $path);
-        $absolute = [];
-
-        foreach ($parts as $part) {
-            if ($part === '.') {
-                continue;
-            } elseif ($part === '..') {
-                array_pop($absolute);
-            } else {
-                $absolute[] = $part;
-            }
-        }
-
-        return implode('/', $absolute);
-    }
-
-    private function scanClassMap(string $path): void
-    {
-        if (is_file($path) && pathinfo($path, PATHINFO_EXTENSION) === 'php') {
-            $this->scanFileForClasses($path);
-        } elseif (is_dir($path)) {
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS)
-            );
-
-            foreach ($iterator as $file) {
-                if ($file->isFile() && $file->getExtension() === 'php') {
-                    $this->scanFileForClasses($file->getPathname());
-                }
-            }
-        }
-    }
-
-    private function scanFileForClasses(string $filePath): void
-    {
-        $content = file_get_contents($filePath);
-        if (!$content) {
+        if (!isset($autoload['psr-0']) || !is_array($autoload['psr-0'])) {
             return;
         }
 
-        $tokens = token_get_all($content);
-        $namespace = '';
-        $classes = [];
-
-        for ($i = 0; $i < count($tokens); $i++) {
-            if ($tokens[$i][0] === T_NAMESPACE) {
-                $namespace = $this->getNamespaceFromTokens($tokens, $i);
-            } elseif (in_array($tokens[$i][0], [T_CLASS, T_INTERFACE, T_TRAIT], true)) {
-                $className = $this->getClassNameFromTokens($tokens, $i);
-                if ($className !== null) {
-                    $fqn = $namespace !== '' ? $namespace . '\\' . $className : $className;
-                    $this->classMap[$fqn] = $filePath;
+        /** @var array<string, mixed> $psr0Config */
+        $psr0Config = $autoload['psr-0'];
+        foreach ($psr0Config as $prefix => $paths) {
+            if (!is_string($prefix)) {
+                continue;
+            }
+            $paths = (array) $paths;
+            foreach ($paths as $path) {
+                if (!is_string($path)) {
+                    continue;
                 }
+                $absolutePath = $this->configParser->normalizePath($basePath . '/' . $path);
+                $this->psrResolver->addPsr0Prefix($prefix, $absolutePath);
+                $this->autoloadRules[] = [
+                    'type' => 'psr0',
+                    'prefix' => $prefix,
+                    'path' => $absolutePath,
+                    'priority' => $priority - 10, // PSR-0 优先级稍低
+                ];
             }
         }
     }
 
-    private function getNamespaceFromTokens(array $tokens, int &$index): string
+    /** @param array<string, mixed> $autoload */
+    private function processClassmapAutoload(array $autoload, string $basePath): void
     {
-        $namespace = '';
-        $index++;
-        
-        while (isset($tokens[$index])) {
-            if ($tokens[$index][0] === T_NAME_QUALIFIED || $tokens[$index][0] === T_STRING) {
-                $namespace .= $tokens[$index][1];
-            } elseif ($tokens[$index] === '\\') {
-                $namespace .= '\\';
-            } elseif ($tokens[$index] === ';' || $tokens[$index] === '{') {
-                break;
-            }
-            $index++;
+        if (!isset($autoload['classmap'])) {
+            return;
         }
-        
-        return $namespace;
+
+        $classmapPaths = (array) $autoload['classmap'];
+        foreach ($classmapPaths as $path) {
+            if (!is_string($path)) {
+                continue;
+            }
+            $absolutePath = $this->configParser->normalizePath($basePath . '/' . $path);
+            $classMap = $this->classScanner->scanClassMap($absolutePath);
+            $this->classMap = array_merge($this->classMap, $classMap);
+        }
     }
 
-    private function getClassNameFromTokens(array $tokens, int &$index): ?string
+    /** @param array<string, mixed> $autoload */
+    private function processFilesAutoload(array $autoload, string $basePath, int $priority): void
     {
-        $index++;
-        
-        while (isset($tokens[$index])) {
-            if ($tokens[$index][0] === T_STRING) {
-                return $tokens[$index][1];
-            } elseif (!in_array($tokens[$index][0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
-                break;
-            }
-            $index++;
+        if (!isset($autoload['files'])) {
+            return;
         }
-        
-        return null;
+
+        $filesList = (array) $autoload['files'];
+        foreach ($filesList as $file) {
+            if (!is_string($file)) {
+                continue;
+            }
+            $absolutePath = $this->configParser->normalizePath($basePath . '/' . $file);
+            $this->files[] = $absolutePath;
+            $this->autoloadRules[] = [
+                'type' => 'files',
+                'prefix' => null,
+                'path' => $absolutePath,
+                'priority' => $priority + 20, // files 优先级最高
+            ];
+        }
     }
 
     private function loadVendorAutoload(string $basePath): void
     {
-        $vendorDir = $basePath . '/vendor';
-        if (!is_dir($vendorDir)) {
-            return;
-        }
-
-        $installedJsonPath = $vendorDir . '/composer/installed.json';
-        if (!file_exists($installedJsonPath)) {
-            return;
-        }
-
-        $installedData = json_decode(file_get_contents($installedJsonPath), true);
-        if (empty($installedData)) {
-            return;
-        }
-
-        $packages = $installedData['packages'] ?? $installedData;
+        $packages = $this->configParser->loadVendorPackages($basePath);
 
         foreach ($packages as $package) {
-            if (!isset($package['name']) || !isset($package['autoload'])) {
+            if (!is_array($package) || !isset($package['autoload'], $package['path'])) {
                 continue;
             }
-
-            $packagePath = $vendorDir . '/' . $package['name'];
-            $this->processAutoloadSection($package['autoload'], $packagePath, 10);
+            if (!is_array($package['autoload']) || !is_string($package['path'])) {
+                continue;
+            }
+            $this->processAutoloadSection($package['autoload'], $package['path'], 10);
         }
     }
 
@@ -270,76 +216,54 @@ class AutoloadResolver
         $this->logger->debug('Resolving class via autoloader', [
             'class' => $className,
             'classMap' => count($this->classMap),
-            'psr4' => count($this->psr4Prefixes),
-            'psr0' => count($this->psr0Prefixes)
+            'psr4' => count($this->psrResolver->getPsr4Prefixes()),
+            'psr0' => count($this->psrResolver->getPsr0Prefixes()),
         ]);
 
         if (isset($this->classMap[$className])) {
             $this->logger->debug('Found in class map', ['class' => $className, 'file' => $this->classMap[$className]]);
+
             return $this->classMap[$className];
         }
 
-        $file = $this->resolvePsr4($className);
-        if ($file !== null && file_exists($file)) {
+        $file = $this->psrResolver->resolvePsr4($className);
+        if (null !== $file && file_exists($file)) {
             $this->logger->debug('Found via PSR-4', ['class' => $className, 'file' => $file]);
+
             return $file;
         }
 
-        $file = $this->resolvePsr0($className);
-        if ($file !== null && file_exists($file)) {
+        $file = $this->psrResolver->resolvePsr0($className);
+        if (null !== $file && file_exists($file)) {
             $this->logger->debug('Found via PSR-0', ['class' => $className, 'file' => $file]);
+
             return $file;
         }
 
         $this->logger->debug('Class not found via autoload', ['class' => $className]);
-        return null;
-    }
-
-    private function resolvePsr4(string $className): ?string
-    {
-        foreach ($this->psr4Prefixes as $prefix => $paths) {
-            if (strpos($className, $prefix) === 0) {
-                $relativeClass = substr($className, strlen($prefix));
-                $relativeClass = str_replace('\\', '/', $relativeClass) . '.php';
-
-                foreach ($paths as $path) {
-                    $file = $this->normalizePath($path . '/' . $relativeClass);
-                    if (file_exists($file)) {
-                        return $file;
-                    }
-                }
-            }
-        }
 
         return null;
     }
 
-    private function resolvePsr0(string $className): ?string
-    {
-        $className = ltrim($className, '\\');
-        
-        foreach ($this->psr0Prefixes as $prefix => $paths) {
-            // 检查类名是否匹配前缀
-            if ($prefix === '' || strpos($className, $prefix) === 0) {
-                // PSR-0: 不移除前缀，整个类名都用于路径
-                $logicalPathPsr0 = strtr($className, '\\', DIRECTORY_SEPARATOR);
-                $logicalPathPsr0 = strtr($logicalPathPsr0, '_', DIRECTORY_SEPARATOR);
-                $logicalPathPsr0 .= '.php';
-
-                foreach ($paths as $path) {
-                    $file = $this->normalizePath($path . '/' . $logicalPathPsr0);
-                    if (file_exists($file)) {
-                        return $file;
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
+    /** @return array<string> */
     public function getRequiredFiles(): array
     {
         return $this->files;
+    }
+
+    /**
+     * @param array<mixed> $array
+     * @return array<string, mixed>
+     */
+    private function ensureStringKeys(array $array): array
+    {
+        $result = [];
+        foreach ($array as $key => $value) {
+            if (is_string($key)) {
+                $result[$key] = $value;
+            }
+        }
+
+        return $result;
     }
 }

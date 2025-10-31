@@ -10,12 +10,12 @@ use TestApp\Controller\HomeController;
 try {
     $app = new Application();
     $app->setDebug(true);
-    
+
     $controller = new HomeController($app);
     $response = $controller->index();
-    
+
     echo $response;
-} catch (\Exception $e) {
-    echo "Error: " . $e->getMessage() . "\n";
+} catch (Exception $e) {
+    echo 'Error: ' . $e->getMessage() . "\n";
     echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
 }

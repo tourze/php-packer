@@ -8,10 +8,9 @@ require_once __DIR__ . '/../../../vendor/autoload.php';
 
 $worker = new Worker('http://0.0.0.0:8080');
 
-$worker->onMessage = function(TcpConnection $connection, Request $request)
-{
+$worker->onMessage = function (TcpConnection $connection, Request $request): void {
     // $request为请求对象，这里没有对请求对象执行任何操作直接返回hello给浏览器
-    $connection->send("hello");
+    $connection->send('hello');
 };
 
 // 运行worker

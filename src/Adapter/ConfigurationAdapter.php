@@ -9,15 +9,15 @@ use Psr\Log\LoggerInterface;
 
 class ConfigurationAdapter
 {
+    /** @var array<string, mixed> */
     private array $config;
-    private string $configPath;
-    private string $rootPath;
-    private LoggerInterface $logger;
 
-    public function __construct(string $configPath, LoggerInterface $logger)
-    {
-        $this->configPath = $configPath;
-        $this->logger = $logger;
+    private string $rootPath;
+
+    public function __construct(
+        private readonly string $configPath,
+        private readonly LoggerInterface $logger,
+    ) {
         $this->loadConfiguration();
         $this->rootPath = dirname($this->configPath);
     }
@@ -29,14 +29,14 @@ class ConfigurationAdapter
         }
 
         $content = file_get_contents($this->configPath);
-        if ($content === false) {
+        if (false === $content) {
             throw new ConfigurationException("Failed to read configuration file: {$this->configPath}");
         }
 
         $extension = pathinfo($this->configPath, PATHINFO_EXTENSION);
-        
-        if ($extension !== 'json') {
-            throw new ConfigurationException("Only JSON configuration files are supported. Got: $extension");
+
+        if ('json' !== $extension) {
+            throw new ConfigurationException("Only JSON configuration files are supported. Got: {$extension}");
         }
 
         $this->config = $this->parseJson($content);
@@ -44,24 +44,37 @@ class ConfigurationAdapter
         $this->logger->info('Configuration loaded successfully', ['path' => $this->configPath]);
     }
 
+    /** @return array<string, mixed> */
     private function parseJson(string $content): array
     {
         $config = json_decode($content, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
+
+        if (JSON_ERROR_NONE !== json_last_error()) {
             throw new ConfigurationException('Invalid JSON configuration: ' . json_last_error_msg());
         }
-        
-        return $config;
+
+        if (!is_array($config)) {
+            throw new ConfigurationException('JSON configuration must be an object/array');
+        }
+
+        // Ensure all keys are strings (object properties)
+        $stringKeyConfig = [];
+        foreach ($config as $key => $value) {
+            if (is_string($key)) {
+                $stringKeyConfig[$key] = $value;
+            }
+        }
+
+        return $stringKeyConfig;
     }
 
     private function validateConfiguration(): void
     {
         $required = ['entry', 'output'];
-        
+
         foreach ($required as $field) {
             if (!isset($this->config[$field])) {
-                throw new ConfigurationException("Required configuration field missing: $field");
+                throw new ConfigurationException("Required configuration field missing: {$field}");
             }
         }
 
@@ -82,23 +95,62 @@ class ConfigurationAdapter
         }
     }
 
-    public function set(string $key, $value): void
+    /**
+     * @param string $key
+     * @param mixed $value
+     */
+    public function set(string $key, mixed $value): void
     {
         $keys = explode('.', $key);
-        $config = &$this->config;
-
-        foreach ($keys as $i => $k) {
-            if ($i === count($keys) - 1) {
-                $config[$k] = $value;
-            } else {
-                if (!isset($config[$k]) || !is_array($config[$k])) {
-                    $config[$k] = [];
-                }
-                $config = &$config[$k];
-            }
-        }
+        $this->setNestedValue($keys, $value);
     }
 
+    /**
+     * @param array<int, string> $keys
+     * @param mixed $value
+     */
+    private function setNestedValue(array $keys, mixed $value): void
+    {
+        if ([] === $keys) {
+            return;
+        }
+
+        $this->config = $this->updateNestedValue($this->config, $keys, $value);
+    }
+
+    /**
+     * 更新嵌套值（纯函数，无副作用）
+     * @param array<string, mixed> $config
+     * @param array<int, string> $keys
+     * @param mixed $value
+     * @return array<string, mixed>
+     */
+    private function updateNestedValue(array $config, array $keys, mixed $value): array
+    {
+        if ([] === $keys) {
+            return $config;
+        }
+
+        $key = array_shift($keys);
+        if (null === $key) {
+            return $config;
+        }
+
+        if ([] === $keys) {
+            // 最后一个key，设置值
+            $config[$key] = $value;
+        } else {
+            // 还有更深层级的key
+            if (!isset($config[$key]) || !is_array($config[$key])) {
+                $config[$key] = [];
+            }
+            $config[$key] = $this->updateNestedValue($config[$key], $keys, $value);
+        }
+
+        return $config;
+    }
+
+    /** @return array<string, mixed> */
     public function all(): array
     {
         return $this->config;
@@ -109,21 +161,33 @@ class ConfigurationAdapter
         return $this->rootPath;
     }
 
+    /** @return array<int, string> */
     public function getIncludePaths(): array
     {
         $paths = $this->get('include_paths', ['./']);
+        assert(is_array($paths));
 
-        return array_map(function ($path) {
-            return $this->rootPath . '/' . ltrim($path, '/');
-        }, $paths);
+        // Ensure $paths is array of strings before mapping
+        $stringPaths = array_filter($paths, 'is_string');
+
+        return array_values(array_map(
+            function (string $path): string {
+                return $this->rootPath . '/' . ltrim($path, '/');
+            },
+            $stringPaths
+        ));
     }
-    
+
+    /** @return array<int, string> */
     public function getIncludePatterns(): array
     {
-        return $this->get('include', []);
+        $patterns = $this->get('include', []);
+        assert(is_array($patterns));
+
+        return array_values(array_filter($patterns, 'is_string'));
     }
 
-    public function get(string $key, $default = null)
+    public function get(string $key, mixed $default = null): mixed
     {
         $keys = explode('.', $key);
         $value = $this->config;
@@ -149,30 +213,51 @@ class ConfigurationAdapter
         return false;
     }
 
+    /** @return array<int, string> */
     public function getExcludePatterns(): array
     {
-        // Use 'exclude' from config, not 'exclude_patterns' with defaults that exclude vendor
-        return $this->get('exclude', []);
+        // Support both 'exclude' and 'exclude_patterns' for backward compatibility
+        $exclude = $this->get('exclude', []);
+        $excludePatterns = $this->get('exclude_patterns', []);
+
+        // Ensure both are arrays of strings
+        $exclude = is_array($exclude) ? array_filter($exclude, 'is_string') : [];
+        $excludePatterns = is_array($excludePatterns) ? array_filter($excludePatterns, 'is_string') : [];
+
+        // Merge both arrays
+        $patterns = array_merge($exclude, $excludePatterns);
+
+        // Add default patterns if no patterns are specified
+        if ([] === $patterns) {
+            $patterns = [
+                '**/tests/**',
+                '**/Tests/**',
+                '**/*Test.php',
+                '**/vendor/**',
+            ];
+        }
+
+        return array_values($patterns);
     }
 
     private function matchPattern(string $pattern, string $path): bool
     {
         // 标准化路径，统一使用正斜杠
         $path = str_replace('\\', '/', $path);
-        
+
         // 转换 glob 模式到正则表达式
         $regex = $this->globToRegex($pattern);
-        
-        return preg_match($regex, $path) === 1;
+
+        return 1 === preg_match($regex, $path);
     }
-    
+
     private function globToRegex(string $pattern): string
     {
         $pattern = str_replace('\\', '/', $pattern);
-        
+
         // 转义正则表达式特殊字符
         $pattern = preg_quote($pattern, '/');
-        
+
         // 转换 glob 通配符到正则表达式
         // 注意顺序很重要，先处理更具体的模式
         $pattern = str_replace([
@@ -190,7 +275,7 @@ class ConfigurationAdapter
             '[^\/]*',
             '.',
         ], $pattern);
-        
+
         return '/^' . $pattern . '$/';
     }
 }

@@ -12,13 +12,13 @@ class HomeController extends BaseController
     {
         parent::__construct($app);
     }
-    
+
     public function index(): string
     {
         $appName = $this->app->getConfig('name');
         $appVersion = $this->app->getConfig('version');
         $isDebug = $this->app->isDebug() ? 'Yes' : 'No';
-        
+
         return sprintf(
             "Welcome to %s v%s!\nDebug mode: %s\n",
             $appName,

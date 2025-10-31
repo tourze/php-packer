@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace PhpPacker\Storage;
 
-use PDO;
+use PhpParser\Node;
 use Psr\Log\LoggerInterface;
 
 class SqliteStorage
 {
-    private PDO $pdo;
+    private \PDO $pdo;
+
     private LoggerInterface $logger;
 
     public function __construct(string $dbPath, LoggerInterface $logger)
@@ -20,9 +21,9 @@ class SqliteStorage
 
     private function initDatabase(string $dbPath): void
     {
-        $this->pdo = new PDO("sqlite:$dbPath");
-        $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $this->pdo = new \PDO("sqlite:{$dbPath}");
+        $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $this->pdo->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
 
         $this->createTables();
         $this->logger->info('SQLite database initialized', ['path' => $dbPath]);
@@ -37,6 +38,8 @@ class SqliteStorage
                 path TEXT NOT NULL UNIQUE,
                 content TEXT,
                 file_type TEXT,
+                class_name TEXT,
+                hash TEXT,
                 is_vendor INTEGER DEFAULT 0,
                 skip_ast INTEGER DEFAULT 0,
                 is_entry INTEGER DEFAULT 0,
@@ -92,6 +95,18 @@ class SqliteStorage
             )
         ');
 
+        // 分析队列表
+        $this->pdo->exec('
+            CREATE TABLE IF NOT EXISTS analysis_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER NOT NULL,
+                priority INTEGER DEFAULT 100,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT "pending",
+                FOREIGN KEY (file_id) REFERENCES files(id)
+            )
+        ');
+
         // AST 节点表
         $this->pdo->exec('
             CREATE TABLE IF NOT EXISTS ast_nodes (
@@ -104,10 +119,31 @@ class SqliteStorage
                 end_line INTEGER,
                 position INTEGER,
                 fqcn TEXT,
+                attributes TEXT,
                 FOREIGN KEY (file_id) REFERENCES files(id),
                 FOREIGN KEY (parent_id) REFERENCES ast_nodes(id)
             )
         ');
+
+        // 添加 attributes 字段到现有表（如果不存在）
+        try {
+            $this->pdo->exec('ALTER TABLE ast_nodes ADD COLUMN attributes TEXT');
+        } catch (\PDOException $e) {
+            // 字段可能已经存在，忽略错误
+            if (!str_contains($e->getMessage(), 'duplicate column name')) {
+                throw $e;
+            }
+        }
+
+        // 添加 hash 字段到现有的 files 表（如果不存在）
+        try {
+            $this->pdo->exec('ALTER TABLE files ADD COLUMN hash TEXT');
+        } catch (\PDOException $e) {
+            // 字段可能已经存在，忽略错误
+            if (!str_contains($e->getMessage(), 'duplicate column name')) {
+                throw $e;
+            }
+        }
 
         // 创建索引
         $this->pdo->exec('CREATE INDEX IF NOT EXISTS idx_files_path ON files(path)');
@@ -123,35 +159,104 @@ class SqliteStorage
         $this->pdo->exec('CREATE INDEX IF NOT EXISTS idx_ast_nodes_fqcn ON ast_nodes(fqcn)');
     }
 
-    public function addFile(string $path, string $content, ?string $fileType = null, ?bool $isEntry = null, ?bool $shouldSkipAst = null): int
+    public function addFile(string $path, string $content, ?string $fileType = null, ?bool $isEntry = null, ?bool $shouldSkipAst = null, ?string $className = null): int
     {
-        // 判断是否是 vendor 文件
-        $isVendor = str_contains($path, 'vendor/') ? 1 : 0;
-        
-        // vendor文件默认跳过AST，除非明确指定不跳过
-        if ($shouldSkipAst !== null) {
-            $skipAst = $shouldSkipAst ? 1 : 0;
-        } else {
-            $skipAst = $isVendor; // vendor文件默认跳过AST
+        $fileData = $this->prepareFileData($path, $content, $fileType, $isEntry, $shouldSkipAst, $className);
+        $existingFile = $this->getFileByPath($path);
+
+        if (null !== $existingFile) {
+            return $this->updateExistingFile($path, $fileData, $existingFile, $isEntry);
         }
-        $isEntry = $isEntry ?? false;
+
+        return $this->insertNewFile($fileData, $isEntry);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function prepareFileData(string $path, string $content, ?string $fileType, ?bool $isEntry, ?bool $shouldSkipAst, ?string $className): array
+    {
+        $isVendor = str_contains($path, 'vendor/') ? 1 : 0;
+        $skipAst = $this->determineSkipAst($shouldSkipAst, $isVendor);
+        $hash = hash('sha256', $content);
+
+        return [
+            'path' => $path,
+            'content' => $content,
+            'file_type' => $fileType,
+            'class_name' => $className,
+            'hash' => $hash,
+            'is_vendor' => $isVendor,
+            'skip_ast' => $skipAst,
+            'analysis_status' => 'pending',
+        ];
+    }
+
+    private function determineSkipAst(?bool $shouldSkipAst, int $isVendor): int
+    {
+        if (null !== $shouldSkipAst) {
+            return $shouldSkipAst ? 1 : 0;
+        }
+
+        return $isVendor;
+    }
+
+    /**
+     * @param array<string, mixed> $fileData
+     * @param array<string, mixed> $existingFile
+     */
+    private function updateExistingFile(string $path, array $fileData, array $existingFile, ?bool $isEntry): int
+    {
+        $preservedIsEntry = (null === $isEntry) ? $existingFile['is_entry'] : ($isEntry ? 1 : 0);
 
         $stmt = $this->pdo->prepare('
-            INSERT OR REPLACE INTO files (path, content, file_type, is_vendor, skip_ast, is_entry, analysis_status)
-            VALUES (:path, :content, :file_type, :is_vendor, :skip_ast, :is_entry, :analysis_status)
+            UPDATE files 
+            SET content = :content, file_type = :file_type, class_name = :class_name, 
+                hash = :hash, is_vendor = :is_vendor, skip_ast = :skip_ast, 
+                is_entry = :is_entry, analysis_status = :analysis_status
+            WHERE path = :path
         ');
 
         $stmt->execute([
             ':path' => $path,
-            ':content' => $content,
-            ':file_type' => $fileType,
-            ':is_vendor' => $isVendor,
-            ':skip_ast' => $skipAst,
-            ':is_entry' => $isEntry ? 1 : 0,
-            ':analysis_status' => 'pending'
+            ':content' => $fileData['content'],
+            ':file_type' => $fileData['file_type'],
+            ':class_name' => $fileData['class_name'],
+            ':hash' => $fileData['hash'],
+            ':is_vendor' => $fileData['is_vendor'],
+            ':skip_ast' => $fileData['skip_ast'],
+            ':is_entry' => $preservedIsEntry,
+            ':analysis_status' => $fileData['analysis_status'],
         ]);
 
-        return (int)$this->pdo->lastInsertId();
+        return $existingFile['id'];
+    }
+
+    /**
+     * @param array<string, mixed> $fileData
+     */
+    private function insertNewFile(array $fileData, ?bool $isEntry): int
+    {
+        $isEntry ??= false;
+
+        $stmt = $this->pdo->prepare('
+            INSERT INTO files (path, content, file_type, class_name, hash, is_vendor, skip_ast, is_entry, analysis_status)
+            VALUES (:path, :content, :file_type, :class_name, :hash, :is_vendor, :skip_ast, :is_entry, :analysis_status)
+        ');
+
+        $stmt->execute([
+            ':path' => $fileData['path'],
+            ':content' => $fileData['content'],
+            ':file_type' => $fileData['file_type'],
+            ':class_name' => $fileData['class_name'],
+            ':hash' => $fileData['hash'],
+            ':is_vendor' => $fileData['is_vendor'],
+            ':skip_ast' => $fileData['skip_ast'],
+            ':is_entry' => $isEntry ? 1 : 0,
+            ':analysis_status' => $fileData['analysis_status'],
+        ]);
+
+        return (int) $this->pdo->lastInsertId();
     }
 
     public function addSymbol(
@@ -162,7 +267,7 @@ class SqliteStorage
         ?string $namespace = null,
         ?string $visibility = null,
         bool $isAbstract = false,
-        bool $isFinal = false
+        bool $isFinal = false,
     ): int {
         $stmt = $this->pdo->prepare('
             INSERT OR REPLACE INTO symbols (
@@ -185,7 +290,7 @@ class SqliteStorage
             ':is_final' => $isFinal ? 1 : 0,
         ]);
 
-        return (int)$this->pdo->lastInsertId();
+        return (int) $this->pdo->lastInsertId();
     }
 
     public function addDependency(
@@ -194,7 +299,7 @@ class SqliteStorage
         ?string $targetSymbol,
         ?int $lineNumber = null,
         bool $isConditional = false,
-        ?string $context = null
+        ?string $context = null,
     ): int {
         $stmt = $this->pdo->prepare('
             INSERT INTO dependencies (
@@ -215,7 +320,7 @@ class SqliteStorage
             ':context' => $context,
         ]);
 
-        return (int)$this->pdo->lastInsertId();
+        return (int) $this->pdo->lastInsertId();
     }
 
     public function addAutoloadRule(string $type, string $path, ?string $prefix = null, int $priority = 100): void
@@ -233,24 +338,29 @@ class SqliteStorage
         ]);
     }
 
+    /** @return ?array<string, mixed> */
     public function getFileByPath(string $path): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM files WHERE path = :path');
         $stmt->execute([':path' => $path]);
-        
+
         $result = $stmt->fetch();
-        return $result !== false ? $result : null;
+
+        return false !== $result ? $result : null;
     }
 
+    /** @return ?array<string, mixed> */
     public function getFileById(int $id): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM files WHERE id = :id');
         $stmt->execute([':id' => $id]);
-        
+
         $result = $stmt->fetch();
-        return $result !== false ? $result : null;
+
+        return false !== $result ? $result : null;
     }
 
+    /** @return ?array<string, mixed> */
     public function findFileBySymbol(string $fqn): ?array
     {
         $stmt = $this->pdo->prepare('
@@ -260,55 +370,82 @@ class SqliteStorage
             LIMIT 1
         ');
         $stmt->execute([':fqn' => $fqn]);
-        
+
         $result = $stmt->fetch();
-        return $result !== false ? $result : null;
+
+        return false !== $result ? $result : null;
     }
 
+    /** @return array<array<string, mixed>> */
     public function getAutoloadRules(): array
     {
         $stmt = $this->pdo->query('
             SELECT * FROM autoload_rules 
             ORDER BY priority DESC, id ASC
         ');
-        
+
+        if (false === $stmt) {
+            return [];
+        }
+
         return $stmt->fetchAll();
     }
 
-    public function getPdo(): PDO
+    public function getPdo(): \PDO
     {
         return $this->pdo;
     }
 
+    /** @return array<string, mixed> */
     public function getStatistics(): array
     {
         $stats = [];
-        
+
         $stmt = $this->pdo->query('SELECT COUNT(*) FROM files');
-        $stats['total_files'] = $stmt->fetchColumn();
-        
+        if (false !== $stmt) {
+            $stats['total_files'] = $stmt->fetchColumn();
+        } else {
+            $stats['total_files'] = 0;
+        }
+
         $stmt = $this->pdo->query('SELECT COUNT(*) FROM symbols WHERE symbol_type = "class"');
-        $stats['total_classes'] = $stmt->fetchColumn();
-        
+        if (false !== $stmt) {
+            $stats['total_classes'] = $stmt->fetchColumn();
+        } else {
+            $stats['total_classes'] = 0;
+        }
+
         $stmt = $this->pdo->query('SELECT COUNT(*) FROM dependencies');
-        $stats['total_dependencies'] = $stmt->fetchColumn();
-        
+        if (false !== $stmt) {
+            $stats['total_dependencies'] = $stmt->fetchColumn();
+        } else {
+            $stats['total_dependencies'] = 0;
+        }
+
+        $stmt = $this->pdo->query('SELECT COUNT(*) FROM autoload_rules');
+        if (false !== $stmt) {
+            $stats['total_autoload_rules'] = $stmt->fetchColumn();
+        } else {
+            $stats['total_autoload_rules'] = 0;
+        }
+
         return $stats;
     }
 
+    /** @param array<Node> $ast */
     public function storeAst(int $fileId, array $ast): void
     {
         // 删除旧的 AST 节点
         $stmt = $this->pdo->prepare('DELETE FROM ast_nodes WHERE file_id = :file_id');
         $stmt->execute([':file_id' => $fileId]);
-        
-        if (empty($ast)) {
+
+        if ([] === $ast) {
             return;
         }
-        
+
         // 存储新的 AST 节点
         $rootId = $this->storeAstNode($fileId, null, 'Root', serialize($ast), 0, 0, 0);
-        
+
         // 更新文件的 ast_root_id
         $stmt = $this->pdo->prepare('UPDATE files SET ast_root_id = :root_id WHERE id = :id');
         $stmt->execute([':root_id' => $rootId, ':id' => $fileId]);
@@ -322,18 +459,19 @@ class SqliteStorage
         int $startLine,
         int $endLine,
         int $position,
-        ?string $fqcn = null
+        ?string $fqcn = null,
+        ?string $attributes = null,
     ): int {
         $stmt = $this->pdo->prepare('
             INSERT INTO ast_nodes (
                 file_id, parent_id, node_type, node_data, 
-                start_line, end_line, position, fqcn
+                start_line, end_line, position, fqcn, attributes
             ) VALUES (
                 :file_id, :parent_id, :node_type, :node_data,
-                :start_line, :end_line, :position, :fqcn
+                :start_line, :end_line, :position, :fqcn, :attributes
             )
         ');
-        
+
         $stmt->execute([
             ':file_id' => $fileId,
             ':parent_id' => $parentId,
@@ -342,12 +480,14 @@ class SqliteStorage
             ':start_line' => $startLine,
             ':end_line' => $endLine,
             ':position' => $position,
-            ':fqcn' => $fqcn
+            ':fqcn' => $fqcn,
+            ':attributes' => $attributes,
         ]);
-        
-        return (int)$this->pdo->lastInsertId();
+
+        return (int) $this->pdo->lastInsertId();
     }
 
+    /** @return array<array<string, mixed>> */
     public function getAstNodesByFileId(int $fileId): array
     {
         $stmt = $this->pdo->prepare('
@@ -356,18 +496,21 @@ class SqliteStorage
             ORDER BY position
         ');
         $stmt->execute([':file_id' => $fileId]);
-        
+
         return $stmt->fetchAll();
     }
 
+    /** @return array<array<string, mixed>> */
     public function getAstNodesByFqcn(string $fqcn): array
     {
         $stmt = $this->pdo->prepare('
-            SELECT * FROM ast_nodes 
-            WHERE fqcn = :fqcn
+            SELECT a.*, f.path 
+            FROM ast_nodes a
+            JOIN files f ON a.file_id = f.id
+            WHERE a.fqcn = :fqcn
         ');
         $stmt->execute([':fqcn' => $fqcn]);
-        
+
         return $stmt->fetchAll();
     }
 
@@ -378,6 +521,7 @@ class SqliteStorage
      * 2. 通过require/include直接依赖的文件
      * 3. 通过类/接口/trait符号间接依赖的文件
      */
+    /** @return array<array<string, mixed>> */
     public function getAllRequiredFiles(int $entryFileId): array
     {
         // 使用更复杂的递归查询，包括符号依赖
@@ -423,13 +567,14 @@ class SqliteStorage
             JOIN dep_tree dt ON f.id = dt.file_id
             ORDER BY dt.depth DESC, f.path
         ';
-        
+
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':entry_id' => $entryFileId]);
-        
+
         return $stmt->fetchAll();
     }
 
+    /** @return array<array<string, mixed>> */
     public function getUnresolvedDependencies(): array
     {
         $stmt = $this->pdo->query('
@@ -438,7 +583,49 @@ class SqliteStorage
             JOIN files f ON d.source_file_id = f.id
             WHERE d.is_resolved = 0
         ');
-        
+
+        if (false === $stmt) {
+            return [];
+        }
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return array<array<string, mixed>> */
+    public function getDependenciesByFile(int $fileId): array
+    {
+        $stmt = $this->pdo->prepare('
+            SELECT d.*, 
+                   sf.path as source_path,
+                   tf.path as target_path
+            FROM dependencies d
+            JOIN files sf ON d.source_file_id = sf.id
+            LEFT JOIN files tf ON d.target_file_id = tf.id
+            WHERE d.source_file_id = :file_id
+            ORDER BY d.id
+        ');
+        $stmt->execute([':file_id' => $fileId]);
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return array<array<string, mixed>> */
+    public function getAllDependencies(): array
+    {
+        $stmt = $this->pdo->query('
+            SELECT d.*, 
+                   sf.path as source_path,
+                   tf.path as target_path
+            FROM dependencies d
+            JOIN files sf ON d.source_file_id = sf.id
+            LEFT JOIN files tf ON d.target_file_id = tf.id
+            ORDER BY d.source_file_id, d.id
+        ');
+
+        if (false === $stmt) {
+            return [];
+        }
+
         return $stmt->fetchAll();
     }
 
@@ -449,7 +636,7 @@ class SqliteStorage
             SET target_file_id = :target_file_id, is_resolved = 1
             WHERE id = :id
         ');
-        
+
         $stmt->execute([
             ':target_file_id' => $targetFileId,
             ':id' => $dependencyId,
@@ -476,6 +663,7 @@ class SqliteStorage
         $stmt->execute([':id' => $fileId]);
     }
 
+    /** @return ?array<string, mixed> */
     public function getNextFileToAnalyze(): ?array
     {
         $stmt = $this->pdo->query('
@@ -485,9 +673,14 @@ class SqliteStorage
             ORDER BY is_entry DESC, id ASC
             LIMIT 1
         ');
-        
+
+        if (false === $stmt) {
+            return null;
+        }
+
         $result = $stmt->fetch();
-        return $result !== false ? $result : null;
+
+        return false !== $result ? $result : null;
     }
 
     public function beginTransaction(): void
@@ -510,12 +703,29 @@ class SqliteStorage
         return $this->storeAstNode($fileId, $parentId, $nodeType, '', 0, 0, $position, $fqcn);
     }
 
+    /** @param array<string, mixed> $nodeData */
+    public function addAstNodeWithData(array $nodeData): int
+    {
+        return $this->storeAstNode(
+            $nodeData['file_id'],
+            $nodeData['parent_id'],
+            $nodeData['node_type'],
+            '',
+            $nodeData['start_line'],
+            $nodeData['end_line'],
+            $nodeData['position'],
+            $nodeData['fqcn'],
+            $nodeData['attributes']
+        );
+    }
+
     public function updateFileAstRoot(int $fileId, int $astRootId): void
     {
         $stmt = $this->pdo->prepare('UPDATE files SET ast_root_id = :ast_root_id WHERE id = :id');
         $stmt->execute([':ast_root_id' => $astRootId, ':id' => $fileId]);
     }
 
+    /** @return array<array<string, mixed>> */
     public function findAstNodeUsages(string $fqcn): array
     {
         return $this->getAstNodesByFqcn($fqcn);
@@ -523,6 +733,13 @@ class SqliteStorage
 
     public function shouldSkipAst(string $relativePath): bool
     {
+        // Check if this file is marked as skip_ast in the database
+        $file = $this->getFileByPath($relativePath);
+        if (null !== $file && (bool) $file['skip_ast']) {
+            return true;
+        }
+
+        // Fallback to pattern matching for specific composer files
         $excludePatterns = [
             'vendor/autoload.php',
             'vendor/composer/autoload_real.php',
@@ -533,13 +750,13 @@ class SqliteStorage
             'vendor/composer/autoload_psr4.php',
             'vendor/composer/ClassLoader.php',
         ];
-        
+
         foreach ($excludePatterns as $pattern) {
             if (str_ends_with($relativePath, $pattern)) {
                 return true;
             }
         }
-        
+
         return false;
     }
 }

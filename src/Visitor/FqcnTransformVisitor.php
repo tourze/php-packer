@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace PhpPacker\Visitor;
 
 use PhpParser\Node;
-use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 
 /**
@@ -19,11 +18,11 @@ class FqcnTransformVisitor extends NodeVisitorAbstract
     public function leaveNode(Node $node)
     {
         // 移除所有use语句
-        if ($node instanceof Node\Stmt\Use_ || 
-            $node instanceof Node\Stmt\GroupUse) {
-            return NodeTraverser::REMOVE_NODE;
+        if ($node instanceof Node\Stmt\Use_
+            || $node instanceof Node\Stmt\GroupUse) {
+            return NodeVisitorAbstract::REMOVE_NODE;
         }
-        
+
         return null;
     }
 }

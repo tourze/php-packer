@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PhpPacker\Generator;
 
+use PhpParser\Comment\Doc;
 use PhpParser\Node;
 use PhpParser\NodeVisitorAbstract;
 
@@ -21,14 +24,14 @@ class SmartCommentRemovalVisitor extends NodeVisitorAbstract
         // 对于方法和函数，检查是否需要保留某些注释
         if ($node instanceof Node\Stmt\Function_ || $node instanceof Node\Stmt\ClassMethod) {
             $docComment = $node->getDocComment();
-            if ($docComment !== null) {
+            if (null !== $docComment) {
                 // 检查是否有必要保留的注释
                 $comment = $docComment->getText();
                 $necessaryComment = $this->filterNecessaryComment($comment, $node);
 
-                if (!empty($necessaryComment)) {
+                if ('' !== $necessaryComment) {
                     // 创建新的注释节点
-                    $newComment = new \PhpParser\Comment\Doc($necessaryComment);
+                    $newComment = new Doc($necessaryComment);
                     $node->setDocComment($newComment);
                 }
             }
@@ -42,58 +45,75 @@ class SmartCommentRemovalVisitor extends NodeVisitorAbstract
      */
     private function filterNecessaryComment(string $comment, Node $node): string
     {
-        if (!($node instanceof Node\Stmt\Function_) && !($node instanceof Node\Stmt\ClassMethod)) {
+        if (!$this->isValidNode($node)) {
             return '';
         }
 
         $lines = explode("\n", $comment);
-        $filteredLines = [];
-        $hasDescription = false;
-
-        // 检查函数/方法的参数和返回类型
-        $params = $node->params;
+        /** @var Node\Stmt\Function_|Node\Stmt\ClassMethod $node */
+        $paramTypes = $this->getParamTypes($node->params);
         $returnType = $node->returnType;
 
-        // 创建参数类型映射
+        $filteredLines = [];
+        foreach ($lines as $line) {
+            $trimmed = trim($line, " \t*");
+
+            if ($this->shouldKeepLine($trimmed, $paramTypes, $returnType)) {
+                $filteredLines[] = $line;
+            }
+        }
+
+        return 0 === count($filteredLines) ? '' : implode("\n", $filteredLines);
+    }
+
+    private function isValidNode(Node $node): bool
+    {
+        return $node instanceof Node\Stmt\Function_ || $node instanceof Node\Stmt\ClassMethod;
+    }
+
+    /**
+     * @param array<int, Node\Param> $params
+     * @return array<string, bool>
+     */
+    private function getParamTypes(array $params): array
+    {
         $paramTypes = [];
         foreach ($params as $param) {
-            if ($param->type !== null) {
+            if (null !== $param->type && $param->var instanceof Node\Expr\Variable && is_string($param->var->name)) {
                 $paramTypes[$param->var->name] = true;
             }
         }
 
-        foreach ($lines as $line) {
-            $trimmed = trim($line, " \t*");
+        return $paramTypes;
+    }
 
-            // 保留描述行（不是 @param 或 @return）
-            if (!empty($trimmed) && !str_starts_with($trimmed, '@')) {
-                if ($trimmed !== '/') {
-                    $hasDescription = true;
-                    $filteredLines[] = $line;
-                }
-            } // 检查 @param 注解
-            elseif (preg_match('/@param\s+(\S+)\s+\$(\w+)/', $trimmed, $matches)) {
-                $paramName = $matches[2];
-                // 如果参数没有类型声明，保留注解
-                if (!isset($paramTypes[$paramName])) {
-                    $filteredLines[] = $line;
-                }
-            } // 检查 @return 注解
-            elseif (str_starts_with($trimmed, '@return') && $returnType === null) {
-                // 如果没有返回类型声明，保留注解
-                $filteredLines[] = $line;
-            } // 保留其他重要注解（如 @throws, @deprecated 等）
-            elseif (preg_match('/@(throws|deprecated|see|since|todo|fixme|internal|api)/i', $trimmed)) {
-                $filteredLines[] = $line;
-            }
+    /**
+     * @param array<string, bool> $paramTypes
+     */
+    private function shouldKeepLine(string $trimmed, array $paramTypes, ?Node $returnType): bool
+    {
+        if ('' === $trimmed || '/' === $trimmed) {
+            return false;
         }
 
-        // 如果没有任何内容需要保留，返回空字符串
-        if (empty($filteredLines)) {
-            return '';
+        // 保留描述行（不是 @param 或 @return）
+        if (!str_starts_with($trimmed, '@')) {
+            return true;
         }
 
-        // 重建注释
-        return implode("\n", $filteredLines);
+        // 检查 @param 注解
+        if (1 === preg_match('/@param\s+(\S+)\s+\$(\w+)/', $trimmed, $matches)) {
+            $paramName = $matches[2];
+
+            return !isset($paramTypes[$paramName]);
+        }
+
+        // 检查 @return 注解
+        if (str_starts_with($trimmed, '@return')) {
+            return null === $returnType;
+        }
+
+        // 保留其他重要注解
+        return (bool) preg_match('/@(throws|deprecated|see|since|todo|fixme|internal|api)/i', $trimmed);
     }
 }

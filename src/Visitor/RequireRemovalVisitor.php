@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace PhpPacker\Visitor;
 
 use PhpParser\Node;
-use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 
 /**
@@ -13,43 +12,99 @@ use PhpParser\NodeVisitorAbstract;
  */
 class RequireRemovalVisitor extends NodeVisitorAbstract
 {
+    /** @var array<string> */
     private array $mergedFiles;
+
     private bool $removeAll;
-    
+
+    /** @param array<string> $mergedFiles */
     public function __construct(array $mergedFiles, bool $removeAll = false)
     {
         $this->mergedFiles = $mergedFiles;
         $this->removeAll = $removeAll;
     }
-    
+
     public function leaveNode(Node $node)
     {
-        // 处理 require/include 语句
-        if ($node instanceof Node\Stmt\Expression &&
-            $node->expr instanceof Node\Expr\Include_) {
-            
-            // 如果设置了移除所有，直接移除
-            if ($this->removeAll) {
-                return NodeTraverser::REMOVE_NODE;
-            }
-            
-            // 检查是否是已合并的文件
-            if ($node->expr->expr instanceof Node\Scalar\String_) {
-                $requiredFile = $node->expr->expr->value;
-                
-                // 检查多种匹配方式
-                foreach ($this->mergedFiles as $mergedFile) {
-                    if ($requiredFile === $mergedFile ||
-                        basename($requiredFile) === basename($mergedFile) ||
-                        str_ends_with($mergedFile, $requiredFile) ||
-                        str_ends_with($requiredFile, $mergedFile)) {
-                        // 跳过已合并的文件
-                        return NodeTraverser::REMOVE_NODE;
-                    }
-                }
+        if (!$this->isIncludeExpression($node)) {
+            return null;
+        }
+
+        return $this->processIncludeNode($node);
+    }
+
+    private function processIncludeNode(Node $node): ?int
+    {
+        if ($this->removeAll) {
+            return NodeVisitorAbstract::REMOVE_NODE;
+        }
+
+        return $this->shouldRemoveInclude($node) ? NodeVisitorAbstract::REMOVE_NODE : null;
+    }
+
+    private function isIncludeExpression(Node $node): bool
+    {
+        return $node instanceof Node\Stmt\Expression
+            && $node->expr instanceof Node\Expr\Include_;
+    }
+
+    private function shouldRemoveInclude(Node $node): bool
+    {
+        $requiredFile = $this->extractRequiredFile($node);
+        if (null === $requiredFile) {
+            return false;
+        }
+
+        return $this->isFileMerged($requiredFile);
+    }
+
+    private function extractRequiredFile(Node $node): ?string
+    {
+        if (!$node instanceof Node\Stmt\Expression) {
+            return null;
+        }
+
+        $includeExpr = $node->expr;
+        assert($includeExpr instanceof Node\Expr\Include_);
+
+        if (!$includeExpr->expr instanceof Node\Scalar\String_) {
+            return null;
+        }
+
+        return $includeExpr->expr->value;
+    }
+
+    private function isFileMerged(string $requiredFile): bool
+    {
+        foreach ($this->mergedFiles as $mergedFile) {
+            if ($this->filesMatch($requiredFile, $mergedFile)) {
+                return true;
             }
         }
-        
-        return null;
+
+        return false;
+    }
+
+    private function filesMatch(string $requiredFile, string $mergedFile): bool
+    {
+        return $this->isExactMatch($requiredFile, $mergedFile)
+            || $this->isBasenameMatch($requiredFile, $mergedFile)
+            || $this->isPathEndMatch($requiredFile, $mergedFile);
+    }
+
+    private function isExactMatch(string $requiredFile, string $mergedFile): bool
+    {
+        return $requiredFile === $mergedFile;
+    }
+
+    private function isBasenameMatch(string $requiredFile, string $mergedFile): bool
+    {
+        return basename($requiredFile) === basename($mergedFile);
+    }
+
+    private function isPathEndMatch(string $requiredFile, string $mergedFile): bool
+    {
+        return str_ends_with($mergedFile, $requiredFile)
+            || str_ends_with($requiredFile, $mergedFile);
     }
 }

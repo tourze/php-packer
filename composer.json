@@ -1,19 +1,25 @@
 {
   "name": "tourze/php-packer",
-  "description": "",
+  "description": "A PHP library for analyzing, packing and merging PHP files using AST storage",
   "type": "library",
   "license": "MIT",
   "require": {
-    "php": "^8.1",
+    "ext-PDO": "*",
+    "ext-tokenizer": "*",
     "monolog/monolog": "^3.1",
-    "nikic/php-parser": "^5.3.0",
+    "nikic/php-parser": "^5.5.0",
     "psr/log": "^3|^2|^1",
-    "symfony/stopwatch": "^6.4"
+    "symfony/stopwatch": "^7.3"
   },
   "require-dev": {
     "phpstan/phpstan": "^2.1",
-    "phpunit/phpunit": "^10.0",
-    "rector/rector": "^2.1"
+    "phpunit/phpunit": "^11.5",
+    "rector/rector": "^2.1",
+    "symfony/config": "^7.3",
+    "symfony/console": "^7.3",
+    "symfony/dependency-injection": "^7.3",
+    "tourze/phpunit-base": "1.*",
+    "tourze/symfony-testing-framework": "0.0.*"
   },
   "autoload": {
     "psr-4": {

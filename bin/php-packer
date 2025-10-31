@@ -3,10 +3,10 @@
 
 declare(strict_types=1);
 
-use PhpPacker\Command\AnalyzeCommand;
-use PhpPacker\Command\DependenciesCommand;
-use PhpPacker\Command\FilesCommand;
-use PhpPacker\Command\PackCommand;
+use PhpPacker\Commander\AnalyzeCommand;
+use PhpPacker\Commander\DependenciesCommand;
+use PhpPacker\Commander\FilesCommand;
+use PhpPacker\Commander\PackCommand;
 
 // Autoloader
 $autoloadPaths = [

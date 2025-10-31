@@ -11,18 +11,18 @@ if (!defined('APP_ROOT')) {
 require_once __DIR__ . '/config.php';
 
 // Simple autoloader for demonstration
-spl_autoload_register(function ($class) {
+spl_autoload_register(function ($class): void {
     $prefix = 'TestApp\\';
     $baseDir = __DIR__ . '/';
-    
+
     $len = strlen($prefix);
-    if (strncmp($prefix, $class, $len) !== 0) {
+    if (0 !== strncmp($prefix, $class, $len)) {
         return;
     }
-    
+
     $relativeClass = substr($class, $len);
     $file = $baseDir . str_replace('\\', '/', $relativeClass) . '.php';
-    
+
     if (file_exists($file)) {
         require $file;
     }
