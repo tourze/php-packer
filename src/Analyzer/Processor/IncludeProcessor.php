@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 namespace PhpPacker\Analyzer\Processor;
 
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use PhpParser\Node;
 
 class IncludeProcessor
 {
-    private SqliteStorage $storage;
+    private StorageInterface $storage;
 
     private int $fileId;
 
     private int $dependencyCount = 0;
 
-    public function __construct(SqliteStorage $storage, int $fileId)
+    public function __construct(StorageInterface $storage, int $fileId)
     {
         $this->storage = $storage;
         $this->fileId = $fileId;
@@ -36,6 +36,7 @@ class IncludeProcessor
 
         $this->storage->addDependency(
             $this->fileId,
+            null,
             $type,
             null,
             $node->getStartLine(),

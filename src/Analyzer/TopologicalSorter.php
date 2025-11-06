@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace PhpPacker\Analyzer;
 
 use PhpPacker\Exception\CircularDependencyException;
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use Psr\Log\LoggerInterface;
 
 class TopologicalSorter
 {
-    private SqliteStorage $storage;
+    private StorageInterface $storage;
 
     private LoggerInterface $logger;
 
-    public function __construct(SqliteStorage $storage, LoggerInterface $logger)
+    public function __construct(StorageInterface $storage, LoggerInterface $logger)
     {
         $this->storage = $storage;
         $this->logger = $logger;

@@ -7,12 +7,12 @@ namespace PhpPacker\Analyzer\Processor;
 use PhpPacker\Analyzer\FileAnalyzer;
 use PhpPacker\Analyzer\FileVerifier;
 use PhpPacker\Analyzer\PathResolver;
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use Psr\Log\LoggerInterface;
 
 class DependencyFileProcessor
 {
-    private SqliteStorage $storage;
+    private StorageInterface $storage;
 
     private LoggerInterface $logger;
 
@@ -23,7 +23,7 @@ class DependencyFileProcessor
     private FileVerifier $fileVerifier;
 
     public function __construct(
-        SqliteStorage $storage,
+        StorageInterface $storage,
         LoggerInterface $logger,
         FileAnalyzer $fileAnalyzer,
         PathResolver $pathResolver,

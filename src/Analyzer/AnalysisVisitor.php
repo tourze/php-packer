@@ -8,7 +8,7 @@ use PhpPacker\Analyzer\Processor\DependencyProcessor;
 use PhpPacker\Analyzer\Processor\IncludeProcessor;
 use PhpPacker\Analyzer\Processor\NodeClassificationProcessor;
 use PhpPacker\Analyzer\Processor\SymbolProcessor;
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use PhpParser\Node;
 use PhpParser\NodeVisitorAbstract;
 
@@ -27,7 +27,7 @@ class AnalysisVisitor extends NodeVisitorAbstract
     /**
      * @phpstan-ignore-next-line constructor.unusedParameter
      */
-    public function __construct(SqliteStorage $storage, int $fileId, ?string $namespace, string $filePath)
+    public function __construct(StorageInterface $storage, int $fileId, ?string $namespace, string $filePath)
     {
         $this->nodeClassifier = new NodeClassificationProcessor();
         $this->symbolProcessor = new SymbolProcessor($storage, $fileId, $namespace);

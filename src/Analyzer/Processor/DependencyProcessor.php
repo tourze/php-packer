@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace PhpPacker\Analyzer\Processor;
 
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use PhpParser\Node;
 
 class DependencyProcessor
 {
-    private SqliteStorage $storage;
+    private StorageInterface $storage;
 
     private int $fileId;
 
@@ -25,7 +25,7 @@ class DependencyProcessor
     /** @var array<array{type: string, fqcn: string, line: int, conditional: bool}> */
     private array $allDependencies = [];
 
-    public function __construct(SqliteStorage $storage, int $fileId)
+    public function __construct(StorageInterface $storage, int $fileId)
     {
         $this->storage = $storage;
         $this->fileId = $fileId;
@@ -320,10 +320,12 @@ class DependencyProcessor
 
         $this->storage->addDependency(
             $this->fileId,
+            null,
             $type,
             $resolvedName,
             $line,
-            $this->inConditionalContext
+            $this->inConditionalContext,
+            null
         );
         ++$this->dependencyCount;
     }

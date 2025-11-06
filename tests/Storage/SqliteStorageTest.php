@@ -97,7 +97,7 @@ final class SqliteStorageTest extends TestCase
     {
         $fileId = $this->storage->addFile('test.php', '<?php class Test {}');
 
-        $symbolId = $this->storage->addSymbol(
+        $this->storage->addSymbol(
             $fileId,
             'class',
             'Test',
@@ -106,8 +106,10 @@ final class SqliteStorageTest extends TestCase
             'public'
         );
 
-        // $symbolId is already typed as int, no need to assert
-        $this->assertGreaterThan(0, $symbolId);
+        // addSymbol now returns void, no ID to assert
+        // Verify symbol was added by checking it can be found
+        $file = $this->storage->findFileBySymbol('Test\Test');
+        $this->assertNotNull($file, 'Symbol should be added and findable');
     }
 
     public function testAddDependency(): void
@@ -115,20 +117,32 @@ final class SqliteStorageTest extends TestCase
         $sourceId = $this->storage->addFile('source.php', '<?php');
         $targetId = $this->storage->addFile('target.php', '<?php');
 
-        $depId = $this->storage->addDependency($sourceId, 'require', null, 10, false, 'require "target.php";');
+        $this->storage->addDependency(
+            $sourceId,
+            $targetId,
+            'require',
+            null,
+            10,
+            false,
+            'require "target.php";'
+        );
 
-        // $depId is already typed as int, no need to assert
-        $this->assertGreaterThan(0, $depId);
+        // addDependency now returns void, no ID to assert
+        // Verify dependency was added by checking the file's dependencies
+        $dependencies = $this->storage->getDependenciesByFile($sourceId);
+        $this->assertGreaterThanOrEqual(1, count($dependencies));
     }
 
     public function testAddDependencyWithoutTarget(): void
     {
         $sourceId = $this->storage->addFile('source.php', '<?php');
 
-        $depId = $this->storage->addDependency($sourceId, 'use_class', 'Some\Class');
+        $this->storage->addDependency($sourceId, null, 'use_class', 'Some\Class');
 
-        // $depId is already typed as int, no need to assert
-        $this->assertGreaterThan(0, $depId);
+        // addDependency now returns void, no ID to assert
+        // Verify dependency was added by checking the file's dependencies
+        $dependencies = $this->storage->getDependenciesByFile($sourceId);
+        $this->assertGreaterThanOrEqual(1, count($dependencies));
     }
 
     public function testFindFileBySymbol(): void
@@ -169,12 +183,19 @@ final class SqliteStorageTest extends TestCase
         $file2Id = $this->storage->addFile('file2.php', '<?php');
 
         // 设置依赖关系
-        $dep1 = $this->storage->addDependency($entryId, 'require', 'file1.php');
-        $dep2 = $this->storage->addDependency($file1Id, 'require', 'file2.php');
+        $this->storage->addDependency($entryId, null, 'require', 'file1.php');
+        $this->storage->addDependency($file1Id, null, 'require', 'file2.php');
 
-        // 解析依赖关系
-        $this->storage->resolveDependency($dep1, $file1Id);
-        $this->storage->resolveDependency($dep2, $file2Id);
+        // 获取依赖关系并解析
+        $entryDependencies = $this->storage->getDependenciesByFile($entryId);
+        $file1Dependencies = $this->storage->getDependenciesByFile($file1Id);
+
+        if (!empty($entryDependencies)) {
+            $this->storage->resolveDependency($entryDependencies[0]['id'], $file1Id);
+        }
+        if (!empty($file1Dependencies)) {
+            $this->storage->resolveDependency($file1Dependencies[0]['id'], $file2Id);
+        }
 
         $files = $this->storage->getAllRequiredFiles($entryId);
 
@@ -191,10 +212,15 @@ final class SqliteStorageTest extends TestCase
         $fileId = $this->storage->addFile('test.php', '<?php');
         $targetId = $this->storage->addFile('target.php', '<?php');
 
-        $unresolvedDep = $this->storage->addDependency($fileId, 'use_class', 'UnresolvedClass');
+        $this->storage->addDependency($fileId, null, 'use_class', 'UnresolvedClass');
 
-        $resolvedDep = $this->storage->addDependency($fileId, 'extends', 'ResolvedClass');
-        $this->storage->resolveDependency($resolvedDep, $targetId);
+        $this->storage->addDependency($fileId, null, 'extends', 'ResolvedClass');
+
+        // Get the dependencies and resolve the second one
+        $dependencies = $this->storage->getDependenciesByFile($fileId);
+        if (count($dependencies) >= 2) {
+            $this->storage->resolveDependency($dependencies[1]['id'], $targetId);
+        }
 
         $unresolved = $this->storage->getUnresolvedDependencies();
 
@@ -210,9 +236,13 @@ final class SqliteStorageTest extends TestCase
         $sourceId = $this->storage->addFile('source.php', '<?php');
         $targetId = $this->storage->addFile('target.php', '<?php');
 
-        $depId = $this->storage->addDependency($sourceId, 'use_class', 'Some\Class');
+        $this->storage->addDependency($sourceId, null, 'use_class', 'Some\Class');
 
-        $this->storage->resolveDependency($depId, $targetId);
+        // Get the dependency and resolve it
+        $dependencies = $this->storage->getDependenciesByFile($sourceId);
+        if (!empty($dependencies)) {
+            $this->storage->resolveDependency($dependencies[0]['id'], $targetId);
+        }
 
         // Verify it's resolved
         $unresolved = $this->storage->getUnresolvedDependencies();
@@ -247,9 +277,9 @@ final class SqliteStorageTest extends TestCase
         $file1Id = $this->storage->addFile('file1.php', '<?php');
         $file2Id = $this->storage->addFile('file2.php', '<?php');
 
-        $this->storage->addDependency($file1Id, 'require', null);
+        $this->storage->addDependency($file1Id, null, 'require', null);
 
-        $this->storage->addDependency($file2Id, 'require', null);
+        $this->storage->addDependency($file2Id, null, 'require', null);
 
         // Should not cause infinite loop (depth limit = 100)
         $files = $this->storage->getAllRequiredFiles($file1Id);
@@ -391,7 +421,7 @@ final class SqliteStorageTest extends TestCase
         $this->storage->addAutoloadRule('psr4', '/src', 'App\\');
 
         $fileId = $this->storage->addFile('file4.php', '<?php');
-        $this->storage->addDependency($fileId, 'use', 'SomeClass');
+        $this->storage->addDependency($fileId, null, 'use', 'SomeClass');
 
         $stats = $this->storage->getStatistics();
 
@@ -434,11 +464,14 @@ final class SqliteStorageTest extends TestCase
         $targetFileId = $this->storage->addFile('target.php', '<?php');
 
         // Add dependencies
-        $dep1Id = $this->storage->addDependency($sourceFileId, 'use_class', 'App\TestClass', 10);
-        $dep2Id = $this->storage->addDependency($sourceFileId, 'extends', 'App\BaseClass', 20);
+        $this->storage->addDependency($sourceFileId, null, 'use_class', 'App\TestClass', 10);
+        $this->storage->addDependency($sourceFileId, null, 'extends', 'App\BaseClass', 20);
 
-        // Resolve one dependency
-        $this->storage->resolveDependency($dep1Id, $targetFileId);
+        // Get dependencies and resolve the first one
+        $dependencies = $this->storage->getDependenciesByFile($sourceFileId);
+        if (!empty($dependencies)) {
+            $this->storage->resolveDependency($dependencies[0]['id'], $targetFileId);
+        }
 
         // Get dependencies for the source file
         $dependencies = $this->storage->getDependenciesByFile($sourceFileId);
@@ -475,9 +508,9 @@ final class SqliteStorageTest extends TestCase
         $file3Id = $this->storage->addFile('file3.php', '<?php');
 
         // Add dependencies from different files
-        $this->storage->addDependency($file1Id, 'use_class', 'App\ClassA', 5);
-        $this->storage->addDependency($file2Id, 'extends', 'App\ClassB', 15);
-        $this->storage->addDependency($file1Id, 'implements', 'App\InterfaceC', 25);
+        $this->storage->addDependency($file1Id, null, 'use_class', 'App\ClassA', 5);
+        $this->storage->addDependency($file2Id, null, 'extends', 'App\ClassB', 15);
+        $this->storage->addDependency($file1Id, null, 'implements', 'App\InterfaceC', 25);
 
         // Get all dependencies
         $allDependencies = $this->storage->getAllDependencies();
@@ -671,13 +704,19 @@ final class SqliteStorageTest extends TestCase
         $fileId = $this->storage->addFile('test.php', '<?php');
 
         // Test different visibility levels
-        $publicSymbolId = $this->storage->addSymbol($fileId, 'method', 'publicMethod', 'TestClass::publicMethod', 'TestClass', 'public');
-        $protectedSymbolId = $this->storage->addSymbol($fileId, 'method', 'protectedMethod', 'TestClass::protectedMethod', 'TestClass', 'protected');
-        $privateSymbolId = $this->storage->addSymbol($fileId, 'method', 'privateMethod', 'TestClass::privateMethod', 'TestClass', 'private');
+        $this->storage->addSymbol($fileId, 'method', 'publicMethod', 'TestClass::publicMethod', 'TestClass', 'public');
+        $this->storage->addSymbol($fileId, 'method', 'protectedMethod', 'TestClass::protectedMethod', 'TestClass', 'protected');
+        $this->storage->addSymbol($fileId, 'method', 'privateMethod', 'TestClass::privateMethod', 'TestClass', 'private');
 
-        $this->assertGreaterThan(0, $publicSymbolId);
-        $this->assertGreaterThan(0, $protectedSymbolId);
-        $this->assertGreaterThan(0, $privateSymbolId);
+        // addSymbol now returns void, no IDs to assert
+        // Verify symbols were added by checking they can be found
+        $publicFile = $this->storage->findFileBySymbol('TestClass::publicMethod');
+        $protectedFile = $this->storage->findFileBySymbol('TestClass::protectedMethod');
+        $privateFile = $this->storage->findFileBySymbol('TestClass::privateMethod');
+
+        $this->assertNotNull($publicFile, 'Public method symbol should be findable');
+        $this->assertNotNull($protectedFile, 'Protected method symbol should be findable');
+        $this->assertNotNull($privateFile, 'Private method symbol should be findable');
     }
 
     public function testAddSymbolWithAbstractAndFinal(): void
@@ -685,11 +724,16 @@ final class SqliteStorageTest extends TestCase
         $fileId = $this->storage->addFile('test.php', '<?php');
 
         // Test abstract and final symbols
-        $abstractSymbolId = $this->storage->addSymbol($fileId, 'class', 'AbstractClass', 'AbstractClass', '', 'public', true);
-        $finalSymbolId = $this->storage->addSymbol($fileId, 'class', 'FinalClass', 'FinalClass', '', 'public', false, true);
+        $this->storage->addSymbol($fileId, 'class', 'AbstractClass', 'AbstractClass', '', 'public', true);
+        $this->storage->addSymbol($fileId, 'class', 'FinalClass', 'FinalClass', '', 'public', false, true);
 
-        $this->assertGreaterThan(0, $abstractSymbolId);
-        $this->assertGreaterThan(0, $finalSymbolId);
+        // addSymbol now returns void, no IDs to assert
+        // Verify symbols were added by checking they can be found
+        $abstractFile = $this->storage->findFileBySymbol('AbstractClass');
+        $finalFile = $this->storage->findFileBySymbol('FinalClass');
+
+        $this->assertNotNull($abstractFile, 'Abstract class symbol should be findable');
+        $this->assertNotNull($finalFile, 'Final class symbol should be findable');
     }
 
     public function testAddDependencyWithCompleteContext(): void
@@ -698,8 +742,9 @@ final class SqliteStorageTest extends TestCase
         $targetId = $this->storage->addFile('target.php', '<?php');
 
         // Test dependency with full context
-        $depId = $this->storage->addDependency(
+        $this->storage->addDependency(
             $sourceId,
+            null,
             'use_class',
             'App\TestClass',
             15,
@@ -707,7 +752,7 @@ final class SqliteStorageTest extends TestCase
             'use App\TestClass;'
         );
 
-        $this->assertGreaterThan(0, $depId);
+        // addDependency now returns void, no ID to assert
 
         // Verify dependency was stored with correct context
         $dependencies = $this->storage->getDependenciesByFile($sourceId);
@@ -781,9 +826,9 @@ final class SqliteStorageTest extends TestCase
         $sourceId = $this->storage->addFile('source.php', '<?php');
 
         // Add multiple unresolved dependencies
-        $this->storage->addDependency($sourceId, 'use_class', 'UnresolvedClass1', 10);
-        $this->storage->addDependency($sourceId, 'extends', 'UnresolvedClass2', 20);
-        $this->storage->addDependency($sourceId, 'implements', 'UnresolvedInterface', 30);
+        $this->storage->addDependency($sourceId, null, 'use_class', 'UnresolvedClass1', 10);
+        $this->storage->addDependency($sourceId, null, 'extends', 'UnresolvedClass2', 20);
+        $this->storage->addDependency($sourceId, null, 'implements', 'UnresolvedInterface', 30);
 
         $unresolved = $this->storage->getUnresolvedDependencies();
 
@@ -805,14 +850,24 @@ final class SqliteStorageTest extends TestCase
         $fileD = $this->storage->addFile('D.php', '<?php');
 
         // Create chain
-        $depAB = $this->storage->addDependency($fileA, 'use_class', 'ClassB');
-        $depBC = $this->storage->addDependency($fileB, 'extends', 'ClassC');
-        $depCD = $this->storage->addDependency($fileC, 'implements', 'InterfaceD');
+        $this->storage->addDependency($fileA, null, 'use_class', 'ClassB');
+        $this->storage->addDependency($fileB, null, 'extends', 'ClassC');
+        $this->storage->addDependency($fileC, null, 'implements', 'InterfaceD');
 
-        // Resolve dependencies
-        $this->storage->resolveDependency($depAB, $fileB);
-        $this->storage->resolveDependency($depBC, $fileC);
-        $this->storage->resolveDependency($depCD, $fileD);
+        // Get dependencies and resolve them
+        $depsA = $this->storage->getDependenciesByFile($fileA);
+        $depsB = $this->storage->getDependenciesByFile($fileB);
+        $depsC = $this->storage->getDependenciesByFile($fileC);
+
+        if (!empty($depsA)) {
+            $this->storage->resolveDependency($depsA[0]['id'], $fileB);
+        }
+        if (!empty($depsB)) {
+            $this->storage->resolveDependency($depsB[0]['id'], $fileC);
+        }
+        if (!empty($depsC)) {
+            $this->storage->resolveDependency($depsC[0]['id'], $fileD);
+        }
 
         // Get all required files from A
         $required = $this->storage->getAllRequiredFiles($fileA);
@@ -863,9 +918,9 @@ final class SqliteStorageTest extends TestCase
         $this->storage->addSymbol($file2Id, 'interface', 'Interface2', 'App\Interface2');
 
         // Add dependencies
-        $this->storage->addDependency($file1Id, 'use_class', 'App\Class2');
-        $this->storage->addDependency($file2Id, 'extends', 'App\BaseClass');
-        $this->storage->addDependency($file3Id, 'require', 'config.php');
+        $this->storage->addDependency($file1Id, null, 'use_class', 'App\Class2');
+        $this->storage->addDependency($file2Id, null, 'extends', 'App\BaseClass');
+        $this->storage->addDependency($file3Id, null, 'require', 'config.php');
 
         // Add autoload rules
         $this->storage->addAutoloadRule('psr4', '/src', 'App\\');
@@ -945,10 +1000,13 @@ final class SqliteStorageTest extends TestCase
 
         // Add data within transaction
         $fileId = $this->storage->addFile('commit_test.php', '<?php echo "commit";');
-        $symbolId = $this->storage->addSymbol($fileId, 'function', 'testFunc', 'testFunc');
+        $this->storage->addSymbol($fileId, 'function', 'testFunc', 'testFunc');
 
         $this->assertGreaterThan(0, $fileId);
-        $this->assertGreaterThan(0, $symbolId);
+        // addSymbol now returns void, no ID to assert
+        // Verify symbol was added by checking it can be found
+        $symbolFile = $this->storage->findFileBySymbol('testFunc');
+        $this->assertNotNull($symbolFile);
 
         // Commit transaction
         $this->storage->commit();
@@ -1079,7 +1137,7 @@ final class SqliteStorageTest extends TestCase
 
         $fileId = $this->storage->addFile('consistency_test.php', '<?php');
         $symbolId = $this->storage->addSymbol($fileId, 'class', 'TestClass', 'TestClass');
-        $depId = $this->storage->addDependency($fileId, 'use_class', 'OtherClass');
+        $this->storage->addDependency($fileId, null, 'use_class', 'OtherClass');
 
         // All should be present in transaction
         $this->assertNotNull($this->storage->getFileByPath('consistency_test.php'));

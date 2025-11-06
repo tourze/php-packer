@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace PhpPacker\Tests\Analyzer\Processor;
 
 use PhpPacker\Analyzer\Processor\DependencyProcessor;
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use PhpParser\Node;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
@@ -22,13 +22,7 @@ final class DependencyProcessorTest extends TestCase
 
     protected function setUp(): void
     {
-        /*
-         * 使用具体类 SqliteStorage 进行 mock 的原因：
-         * 1) 为什么必须使用具体类而不是接口：SqliteStorage 没有对应的接口抽象，且 DependencyProcessor 构造函数直接依赖具体实现
-         * 2) 这种使用是否合理和必要：在单元测试中合理，避免真实数据库操作，专注测试 DependencyProcessor 的依赖分析逻辑
-         * 3) 是否有更好的替代方案：理想情况下应该为存储层定义接口，但当前架构下使用 mock 是最佳选择
-         */
-        $storage = $this->createMock(SqliteStorage::class);
+        $storage = $this->createMock(StorageInterface::class);
         $fileId = 1;
         $this->processor = new DependencyProcessor($storage, $fileId);
     }

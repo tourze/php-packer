@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace PhpPacker\Analyzer;
 
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use Psr\Log\LoggerInterface;
 
 class ClassFinder
 {
-    private SqliteStorage $storage;
+    private StorageInterface $storage;
 
     private LoggerInterface $logger;
 
@@ -20,7 +20,7 @@ class ClassFinder
     private FileVerifier $fileVerifier;
 
     public function __construct(
-        SqliteStorage $storage,
+        StorageInterface $storage,
         LoggerInterface $logger,
         AutoloadResolver $autoloadResolver,
         PathResolver $pathResolver,

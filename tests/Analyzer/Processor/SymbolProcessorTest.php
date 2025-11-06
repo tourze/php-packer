@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace PhpPacker\Tests\Analyzer\Processor;
 
 use PhpPacker\Analyzer\Processor\SymbolProcessor;
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use PhpParser\Modifiers;
 use PhpParser\Node\Stmt;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -19,17 +19,11 @@ final class SymbolProcessorTest extends TestCase
 {
     private SymbolProcessor $processor;
 
-    private SqliteStorage $storage;
+    private StorageInterface $storage;
 
     protected function setUp(): void
     {
-        /*
-         * 使用具体类 SqliteStorage 进行 mock 的原因：
-         * 1) 为什么必须使用具体类而不是接口：SqliteStorage 没有对应的接口拽象，且 SymbolProcessor 构造函数直接依赖具体实现
-         * 2) 这种使用是否合理和必要：在单元测试中合理，避免真实数据库操作，专注测试 SymbolProcessor 的符号处理逻辑
-         * 3) 是否有更好的替代方案：理想情况下应该为存储层定义接口，但当前架构下使用 mock 是最佳选择
-         */
-        $this->storage = $this->createMock(SqliteStorage::class);
+        $this->storage = $this->createMock(StorageInterface::class);
         $fileId = 1;
         $namespace = 'Test\Namespace';
         $this->processor = new SymbolProcessor($this->storage, $fileId, $namespace);

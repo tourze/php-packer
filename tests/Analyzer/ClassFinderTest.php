@@ -8,7 +8,7 @@ use PhpPacker\Analyzer\AutoloadResolver;
 use PhpPacker\Analyzer\ClassFinder;
 use PhpPacker\Analyzer\FileVerifier;
 use PhpPacker\Analyzer\PathResolver;
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -21,7 +21,7 @@ final class ClassFinderTest extends TestCase
 {
     private ClassFinder $classFinder;
 
-    private SqliteStorage $storage;
+    private StorageInterface $storage;
 
     private LoggerInterface $logger;
 
@@ -34,13 +34,7 @@ final class ClassFinderTest extends TestCase
     protected function setUp(): void
     {
         // 创建 Mock 对象
-        /*
-         * 使用具体类 SqliteStorage 进行 mock 的原因：
-         * 1) 为什么必须使用具体类而不是接口：SqliteStorage 没有对应的接口抽象，且 ClassFinder 构造函数直接依赖具体实现
-         * 2) 这种使用是否合理和必要：在单元测试中合理，因为我们只需要验证 ClassFinder 的行为而不关心存储的具体实现
-         * 3) 是否有更好的替代方案：理想情况下应该为存储层定义接口，但当前架构下使用 mock 是最佳选择
-         */
-        $this->storage = $this->createMock(SqliteStorage::class);
+        $this->storage = $this->createMock(StorageInterface::class);
         $this->logger = $this->createMock(LoggerInterface::class);
         /*
          * 使用具体类 AutoloadResolver 进行 mock 的原因：
@@ -92,7 +86,7 @@ final class ClassFinderTest extends TestCase
 
         // 验证构造函数参数类型
         $params = $constructor->getParameters();
-        $this->assertEquals('PhpPacker\Storage\SqliteStorage', $this->getTypeName($params[0]->getType()));
+        $this->assertEquals('PhpPacker\Storage\StorageInterface', $this->getTypeName($params[0]->getType()));
         $this->assertEquals('Psr\Log\LoggerInterface', $this->getTypeName($params[1]->getType()));
         $this->assertEquals('PhpPacker\Analyzer\AutoloadResolver', $this->getTypeName($params[2]->getType()));
         $this->assertEquals('PhpPacker\Analyzer\PathResolver', $this->getTypeName($params[3]->getType()));

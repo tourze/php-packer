@@ -144,9 +144,9 @@ class Service {}
         $cId = $this->storage->addFile('c.php', '<?php');
 
         // Add dependencies: entry depends on a, a depends on b, b depends on c
-        $this->storage->addDependency($entryId, 'require', 'a.php');
-        $this->storage->addDependency($aId, 'require', 'b.php');
-        $this->storage->addDependency($bId, 'require', 'c.php');
+        $this->storage->addDependency($entryId, null, 'require', 'a.php');
+        $this->storage->addDependency($aId, null, 'require', 'b.php');
+        $this->storage->addDependency($bId, null, 'require', 'c.php');
 
         $loadOrder = $this->resolver->getLoadOrder($entryId);
 
@@ -284,7 +284,7 @@ $obj = new SomeClass();
     {
         // Create file with unresolvable dependency
         $fileId = $this->storage->addFile('test.php', '<?php');
-        $this->storage->addDependency($fileId, 'use_class', 'Unresolvable\SomeClass');
+        $this->storage->addDependency($fileId, null, 'use_class', 'Unresolvable\SomeClass');
 
         // Set up entry file
         $entryFile = $this->createFile('entry.php', '<?php');
@@ -323,7 +323,7 @@ $obj = new SomeClass();
         ];
 
         foreach ($deps as [$source, $target]) {
-            $this->storage->addDependency($fileIds[$source], 'require', "{$target}.php");
+            $this->storage->addDependency($fileIds[$source], null, 'require', "{$target}.php");
         }
 
         $loadOrder = $this->resolver->getLoadOrder($fileIds['entry']);

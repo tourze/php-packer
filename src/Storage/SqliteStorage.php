@@ -7,7 +7,7 @@ namespace PhpPacker\Storage;
 use PhpParser\Node;
 use Psr\Log\LoggerInterface;
 
-class SqliteStorage
+class SqliteStorage implements StorageInterface
 {
     private \PDO $pdo;
 
@@ -261,17 +261,17 @@ class SqliteStorage
 
     public function addSymbol(
         int $fileId,
-        string $type,
-        string $name,
+        string $symbolType,
+        string $symbolName,
         string $fqn,
         ?string $namespace = null,
         ?string $visibility = null,
         bool $isAbstract = false,
-        bool $isFinal = false,
-    ): int {
+        bool $isFinal = false
+    ): void {
         $stmt = $this->pdo->prepare('
             INSERT OR REPLACE INTO symbols (
-                file_id, symbol_type, symbol_name, fqn, namespace, 
+                file_id, symbol_type, symbol_name, fqn, namespace,
                 visibility, is_abstract, is_final
             ) VALUES (
                 :file_id, :symbol_type, :symbol_name, :fqn, :namespace,
@@ -281,46 +281,44 @@ class SqliteStorage
 
         $stmt->execute([
             ':file_id' => $fileId,
-            ':symbol_type' => $type,
-            ':symbol_name' => $name,
+            ':symbol_type' => $symbolType,
+            ':symbol_name' => $symbolName,
             ':fqn' => $fqn,
             ':namespace' => $namespace,
             ':visibility' => $visibility,
             ':is_abstract' => $isAbstract ? 1 : 0,
             ':is_final' => $isFinal ? 1 : 0,
         ]);
-
-        return (int) $this->pdo->lastInsertId();
     }
 
     public function addDependency(
         int $sourceFileId,
-        string $type,
-        ?string $targetSymbol,
+        ?int $targetFileId,
+        string $dependencyType,
+        ?string $targetSymbol = null,
         ?int $lineNumber = null,
         bool $isConditional = false,
-        ?string $context = null,
-    ): int {
+        ?string $context = null
+    ): void {
         $stmt = $this->pdo->prepare('
             INSERT INTO dependencies (
-                source_file_id, dependency_type, target_symbol, 
+                source_file_id, target_file_id, dependency_type, target_symbol,
                 line_number, is_conditional, context
             ) VALUES (
-                :source_file_id, :dependency_type, :target_symbol,
+                :source_file_id, :target_file_id, :dependency_type, :target_symbol,
                 :line_number, :is_conditional, :context
             )
         ');
 
         $stmt->execute([
             ':source_file_id' => $sourceFileId,
-            ':dependency_type' => $type,
+            ':target_file_id' => $targetFileId,
+            ':dependency_type' => $dependencyType,
             ':target_symbol' => $targetSymbol,
             ':line_number' => $lineNumber,
             ':is_conditional' => $isConditional ? 1 : 0,
             ':context' => $context,
         ]);
-
-        return (int) $this->pdo->lastInsertId();
     }
 
     public function addAutoloadRule(string $type, string $path, ?string $prefix = null, int $priority = 100): void

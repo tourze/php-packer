@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace PhpPacker\Analyzer\Processor;
 
-use PhpPacker\Storage\SqliteStorage;
+use PhpPacker\Storage\StorageInterface;
 use PhpParser\Node;
 
 class SymbolProcessor
 {
-    private SqliteStorage $storage;
+    private StorageInterface $storage;
 
     private int $fileId;
 
@@ -17,7 +17,7 @@ class SymbolProcessor
 
     private int $symbolCount = 0;
 
-    public function __construct(SqliteStorage $storage, int $fileId, ?string $namespace)
+    public function __construct(StorageInterface $storage, int $fileId, ?string $namespace)
     {
         $this->storage = $storage;
         $this->fileId = $fileId;
