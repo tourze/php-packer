@@ -80,7 +80,6 @@ class AstStorage
     {
         $childPosition = 0;
         foreach ($node->getSubNodeNames() as $subNodeName) {
-            /** @phpstan-ignore-next-line property.dynamicName */
             $subNode = $node->{$subNodeName};
             $childPosition = $this->processSubNode($subNode, $fileId, $nodeId, $childPosition, $currentNamespace);
         }
