@@ -25,7 +25,7 @@ class AstOptimizer
     public function optimizeAst(array $ast): array
     {
         $traverser = new NodeTraverser();
-        $traverser->addVisitor(new OptimizationVisitor($this->logger));
+        $traverser->addVisitor(new OptimizationVisitor());
 
         return $traverser->traverse($ast);
     }

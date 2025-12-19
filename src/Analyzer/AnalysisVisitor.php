@@ -24,10 +24,7 @@ class AnalysisVisitor extends NodeVisitorAbstract
 
     private bool $inConditionalContext = false;
 
-    /**
-     * @phpstan-ignore-next-line constructor.unusedParameter
-     */
-    public function __construct(StorageInterface $storage, int $fileId, ?string $namespace, string $filePath)
+    public function __construct(StorageInterface $storage, int $fileId, ?string $namespace)
     {
         $this->nodeClassifier = new NodeClassificationProcessor();
         $this->symbolProcessor = new SymbolProcessor($storage, $fileId, $namespace);

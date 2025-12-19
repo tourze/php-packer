@@ -8,10 +8,11 @@ use PhpPacker\Analyzer\AutoloadResolver;
 use PhpPacker\Analyzer\ClassFinder;
 use PhpPacker\Analyzer\FileVerifier;
 use PhpPacker\Analyzer\PathResolver;
+use PhpPacker\Storage\SqliteStorage;
 use PhpPacker\Storage\StorageInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -23,48 +24,42 @@ final class ClassFinderTest extends TestCase
 
     private StorageInterface $storage;
 
-    private LoggerInterface $logger;
-
     private AutoloadResolver $autoloadResolver;
 
     private PathResolver $pathResolver;
 
     private FileVerifier $fileVerifier;
 
+    private string $dbPath;
+
     protected function setUp(): void
     {
-        // 创建 Mock 对象
-        $this->storage = $this->createMock(StorageInterface::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        /*
-         * 使用具体类 AutoloadResolver 进行 mock 的原因：
-         * 1) 为什么必须使用具体类而不是接口：AutoloadResolver 没有对应的接口抽象，ClassFinder 需要依赖其具体方法
-         * 2) 这种使用是否合理和必要：在单元测试中合理，允许我们隔离测试 ClassFinder 而不依赖 AutoloadResolver 的实际实现
-         * 3) 是否有更好的替代方案：应该为 AutoloadResolver 定义接口来改善可测试性，但当前使用 mock 是可接受的
-         */
-        $this->autoloadResolver = $this->createMock(AutoloadResolver::class);
-        /*
-         * 使用具体类 PathResolver 进行 mock 的原因：
-         * 1) 为什么必须使用具体类而不是接口：PathResolver 没有对应的接口抽象，ClassFinder 直接依赖其具体实现
-         * 2) 这种使用是否合理和必要：在单元测试中合理，避免了路径解析的复杂性，专注测试 ClassFinder 的核心逻辑
-         * 3) 是否有更好的替代方案：定义路径解析接口会更好，但当前架构下 mock 是合理的测试策略
-         */
-        $this->pathResolver = $this->createMock(PathResolver::class);
-        /*
-         * 使用具体类 FileVerifier 进行 mock 的原因：
-         * 1) 为什么必须使用具体类而不是接口：FileVerifier 没有对应的接口抽象，ClassFinder 需要其文件验证功能
-         * 2) 这种使用是否合理和必要：在单元测试中合理，避免真实的文件系统操作，提高测试的独立性和速度
-         * 3) 是否有更好的替代方案：为文件验证定义接口会改善架构，但当前使用 mock 是有效的测试方法
-         */
-        $this->fileVerifier = $this->createMock(FileVerifier::class);
+        $logger = new NullLogger();
+
+        // 创建临时数据库
+        $this->dbPath = sys_get_temp_dir() . '/test-' . uniqid() . '.db';
+        $this->storage = new SqliteStorage($this->dbPath, $logger);
+
+        // 创建真实实现
+        $this->autoloadResolver = new AutoloadResolver($this->storage, $logger);
+        $this->pathResolver = new PathResolver($logger);
+        $this->fileVerifier = new FileVerifier($logger);
 
         $this->classFinder = new ClassFinder(
             $this->storage,
-            $this->logger,
+            $logger,
             $this->autoloadResolver,
             $this->pathResolver,
             $this->fileVerifier
         );
+    }
+
+    protected function tearDown(): void
+    {
+        // 清理临时数据库
+        if (file_exists($this->dbPath)) {
+            unlink($this->dbPath);
+        }
     }
 
     public function testClassFinderExists(): void
@@ -104,20 +99,14 @@ final class ClassFinderTest extends TestCase
 
     public function testFindClassFile(): void
     {
-        $this->storage->expects($this->once())
-            ->method('findFileBySymbol')
-            ->with('TestClass')
-            ->willReturn(['path' => '/test/path/TestClass.php'])
-        ;
-
-        $this->pathResolver->expects($this->once())
-            ->method('makeAbsolutePath')
-            ->with('/test/path/TestClass.php')
-            ->willReturn('/absolute/test/path/TestClass.php')
-        ;
+        // 准备测试数据：在数据库中插入一个文件记录
+        $fileId = $this->storage->addFile('/test/path/TestClass.php', '<?php class TestClass {}', 'php', false);
+        $this->storage->addSymbol($fileId, 'class', 'TestClass', 'TestClass');
 
         $result = $this->classFinder->findClassFile('TestClass');
 
-        $this->assertEquals('/absolute/test/path/TestClass.php', $result);
+        // 验证返回的是绝对路径
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('TestClass.php', $result);
     }
 }

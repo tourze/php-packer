@@ -20,16 +20,16 @@ interface StorageInterface
     public function addFile(string $path, string $content, ?string $fileType = null, ?bool $isEntry = null, ?bool $shouldSkipAst = null, ?string $className = null): int;
 
     /**
-     * Add a symbol (class, interface, trait, function) to storage.
+     * 添加符号（类、接口、trait、函数）到存储。
      *
-     * @param int $fileId The file ID
-     * @param string $symbolType Type of symbol (class, interface, trait, function)
-     * @param string $symbolName Name of the symbol
-     * @param string $fqn Fully qualified name
-     * @param string|null $namespace Namespace
-     * @param string|null $visibility Visibility (public, private, protected)
-     * @param bool $isAbstract Whether the symbol is abstract
-     * @param bool $isFinal Whether the symbol is final
+     * @param int $fileId 文件ID
+     * @param string $symbolType 符号类型（class, interface, trait, function）
+     * @param string $symbolName 符号名称
+     * @param string $fqn 完全限定名
+     * @param string|null $namespace 命名空间
+     * @param string|null $visibility 可见性（public, private, protected）
+     * @param bool $isAbstract 是否为抽象符号
+     * @param bool $isFinal 是否为final符号
      */
     public function addSymbol(
         int $fileId,
@@ -43,15 +43,15 @@ interface StorageInterface
     ): void;
 
     /**
-     * Add a dependency between files.
+     * 添加文件之间的依赖关系。
      *
-     * @param int $sourceFileId Source file ID
-     * @param int|null $targetFileId Target file ID (null if unresolved)
-     * @param string $dependencyType Type of dependency
-     * @param string|null $targetSymbol Target symbol name
-     * @param int|null $lineNumber Line number where dependency occurs
-     * @param bool $isConditional Whether dependency is conditional
-     * @param string|null $context Additional context
+     * @param int $sourceFileId 源文件ID
+     * @param int|null $targetFileId 目标文件ID（未解析时为null）
+     * @param string $dependencyType 依赖类型
+     * @param string|null $targetSymbol 目标符号名称
+     * @param int|null $lineNumber 依赖发生的行号
+     * @param bool $isConditional 是否为条件依赖
+     * @param string|null $context 附加上下文
      */
     public function addDependency(
         int $sourceFileId,
@@ -64,82 +64,82 @@ interface StorageInterface
     ): void;
 
     /**
-     * Add an autoload rule.
+     * 添加自动加载规则。
      */
     public function addAutoloadRule(string $type, string $path, ?string $prefix = null, int $priority = 100): void;
 
     /**
-     * Get file by path.
+     * 根据路径获取文件。
      */
     public function getFileByPath(string $path): ?array;
 
     /**
-     * Get file by ID.
+     * 根据ID获取文件。
      */
     public function getFileById(int $id): ?array;
 
     /**
-     * Find file by symbol name.
+     * 根据符号名查找文件。
      */
     public function findFileBySymbol(string $fqn): ?array;
 
     /**
-     * Get all autoload rules.
+     * 获取所有自动加载规则。
      */
     public function getAutoloadRules(): array;
 
     /**
-     * Get storage statistics.
+     * 获取存储统计信息。
      */
     public function getStatistics(): array;
 
     /**
-     * Store AST data for a file.
+     * 存储文件的AST数据。
      */
     public function storeAst(int $fileId, array $ast): void;
 
     /**
-     * Get AST nodes by file ID.
+     * 根据文件ID获取AST节点。
      */
     public function getAstNodesByFileId(int $fileId): array;
 
     /**
-     * Get AST nodes by fully qualified class name.
+     * 根据完全限定类名获取AST节点。
      */
     public function getAstNodesByFqcn(string $fqcn): array;
 
     /**
-     * Get all required files for entry point.
+     * 获取入口点所需的所有文件。
      */
     public function getAllRequiredFiles(int $entryFileId): array;
 
     /**
-     * Get unresolved dependencies.
+     * 获取未解析的依赖。
      */
     public function getUnresolvedDependencies(): array;
 
     /**
-     * Get dependencies by file.
+     * 根据文件获取依赖。
      */
     public function getDependenciesByFile(int $fileId): array;
 
     /**
-     * Get all dependencies.
+     * 获取所有依赖。
      */
     public function getAllDependencies(): array;
 
     /**
-     * Resolve a dependency by setting target file ID.
+     * 通过设置目标文件ID解析依赖。
      */
     public function resolveDependency(int $dependencyId, int $targetFileId): void;
 
     /**
-     * Mark file as analyzed.
+     * 标记文件为已分析。
      */
     public function markFileAnalyzed(int $fileId): void;
 
     /**
-     * Get the PDO instance for direct database access.
+     * 获取PDO实例用于直接数据库访问。
      */
     public function getPdo(): \PDO;
 }

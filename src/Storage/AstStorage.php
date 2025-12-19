@@ -79,9 +79,13 @@ class AstStorage
     private function storeChildNodes(Node $node, int $fileId, int $nodeId, ?Node\Stmt\Namespace_ $currentNamespace = null): void
     {
         $childPosition = 0;
+        $reflection = new \ReflectionObject($node);
         foreach ($node->getSubNodeNames() as $subNodeName) {
-            $subNode = $node->{$subNodeName};
-            $childPosition = $this->processSubNode($subNode, $fileId, $nodeId, $childPosition, $currentNamespace);
+            if ($reflection->hasProperty($subNodeName)) {
+                $property = $reflection->getProperty($subNodeName);
+                $subNode = $property->getValue($node);
+                $childPosition = $this->processSubNode($subNode, $fileId, $nodeId, $childPosition, $currentNamespace);
+            }
         }
     }
 

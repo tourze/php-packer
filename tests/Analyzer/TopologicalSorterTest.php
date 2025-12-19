@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace PhpPacker\Tests\Analyzer;
 
 use PhpPacker\Analyzer\TopologicalSorter;
-use PhpPacker\Storage\StorageInterface;
+use PhpPacker\Storage\SqliteStorage;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -18,11 +18,21 @@ final class TopologicalSorterTest extends TestCase
 {
     private TopologicalSorter $sorter;
 
+    private string $dbPath;
+
     protected function setUp(): void
     {
-        $storage = $this->createMock(StorageInterface::class);
-        $logger = $this->createMock(LoggerInterface::class);
+        $this->dbPath = sys_get_temp_dir() . '/test-' . uniqid() . '.db';
+        $storage = new SqliteStorage($this->dbPath, new NullLogger());
+        $logger = new NullLogger();
         $this->sorter = new TopologicalSorter($storage, $logger);
+    }
+
+    protected function tearDown(): void
+    {
+        if (file_exists($this->dbPath)) {
+            unlink($this->dbPath);
+        }
     }
 
     public function testSortSimpleDependencies(): void

@@ -8,7 +8,7 @@ use PhpPacker\Adapter\ConfigurationAdapter;
 use PhpPacker\Packer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -18,7 +18,7 @@ final class PackerIntegrationTest extends TestCase
 {
     private static string $tempDir;
 
-    private LoggerInterface $logger;
+    private NullLogger $logger;
 
     public function testPackSimpleProject(): void
     {
@@ -392,6 +392,6 @@ echo $a->test() . "\n";
         self::$tempDir = sys_get_temp_dir() . '/php-packer-integration-' . uniqid();
         mkdir(self::$tempDir, 0o777, true);
 
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->logger = new NullLogger();
     }
 }

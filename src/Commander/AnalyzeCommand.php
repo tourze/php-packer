@@ -153,7 +153,7 @@ Options:
     private function initializeServices(SqliteStorage $storage, string $rootPath): array
     {
         $fileAnalyzer = new FileAnalyzer($storage, $this->logger, $rootPath);
-        $autoloadResolver = new AutoloadResolver($storage, $this->logger, $rootPath);
+        $autoloadResolver = new AutoloadResolver($storage, $this->logger);
         $dependencyResolver = new DependencyResolver(
             $storage,
             $this->logger,

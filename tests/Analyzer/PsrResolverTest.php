@@ -8,7 +8,7 @@ use PhpPacker\Analyzer\ComposerConfigParser;
 use PhpPacker\Analyzer\PsrResolver;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -20,35 +20,8 @@ final class PsrResolverTest extends TestCase
 
     protected function setUp(): void
     {
-        $logger = $this->createMock(LoggerInterface::class);
-        /*
-         * 使用具体类 ComposerConfigParser 进行 mock 的原因：
-         * 1) 为什么必须使用具体类而不是接口：ComposerConfigParser 没有对应的接口拽象，且 PsrResolver 构造函数直接依赖具体实现
-         * 2) 这种使用是否合理和必要：在单元测试中合理，避免真实的 composer.json 文件解析，专注测试 PSR 解析逻辑
-         * 3) 是否有更好的替代方案：为配置解析器定义接口会改善架构，但当前使用 mock 是有效的测试方法
-         */
-        $configParser = $this->createMock(ComposerConfigParser::class);
-        $configParser->method('normalizePath')->willReturnCallback(function ($path) {
-            $path = str_replace('\\', '/', $path);
-            $normalizedPath = preg_replace('#/+#', '/', $path);
-            $this->assertIsString($normalizedPath);
-
-            $parts = explode('/', $normalizedPath);
-            $absolute = [];
-
-            foreach ($parts as $part) {
-                if ('.' === $part) {
-                    continue;
-                }
-                if ('..' === $part) {
-                    array_pop($absolute);
-                } else {
-                    $absolute[] = $part;
-                }
-            }
-
-            return implode('/', $absolute);
-        });
+        $logger = new NullLogger();
+        $configParser = new ComposerConfigParser($logger);
         $this->resolver = new PsrResolver($logger, $configParser);
     }
 
@@ -142,18 +115,6 @@ final class PsrResolverTest extends TestCase
     public function testResolvePsr0(): void
     {
         $this->resolver->addPsr0Prefix('Legacy_', 'lib/');
-
-        // 模拟文件存在的情况
-        $configParser = $this->createMock(ComposerConfigParser::class);
-        $configParser->method('normalizePath')
-            ->willReturnCallback(function ($path) {
-                return str_replace('\\', '/', $path);
-            })
-        ;
-
-        $reflection = new \ReflectionProperty($this->resolver, 'configParser');
-        $reflection->setAccessible(true);
-        $reflection->setValue($this->resolver, $configParser);
 
         // 测试 PSR-0 解析逻辑
         $possiblePaths = $this->resolver->resolvePossiblePaths('Legacy_Database_Connection');

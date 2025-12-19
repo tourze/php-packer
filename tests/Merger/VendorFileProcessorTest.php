@@ -7,7 +7,7 @@ namespace PhpPacker\Tests\Merger;
 use PhpPacker\Merger\VendorFileProcessor;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -21,7 +21,7 @@ final class VendorFileProcessorTest extends TestCase
 
     protected function setUp(): void
     {
-        $logger = $this->createMock(LoggerInterface::class);
+        $logger = new NullLogger();
         $this->processor = new VendorFileProcessor($logger);
         // 重置设置到默认值
         $this->processor->setStripComments(false);

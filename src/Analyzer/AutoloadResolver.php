@@ -28,14 +28,10 @@ class AutoloadResolver
     /** @var array<array{type: string, prefix: string|null, path: string, priority: int}> */
     private array $autoloadRules = [];
 
-    /**
-     * @phpstan-ignore-next-line constructor.unusedParameter
-     */
-    public function __construct(SqliteStorage $storage, LoggerInterface $logger, string $rootPath)
+    public function __construct(SqliteStorage $storage, LoggerInterface $logger)
     {
         $this->storage = $storage;
         $this->logger = $logger;
-        // $rootPath parameter kept for backward compatibility
 
         // 创建助手类实例
         $this->configParser = new ComposerConfigParser($logger);

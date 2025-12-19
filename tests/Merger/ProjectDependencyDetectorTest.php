@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace PhpPacker\Tests\Merger;
 
+use PhpPacker\Merger\NodeDeduplicator;
 use PhpPacker\Merger\ProjectDependencyDetector;
 use PhpPacker\Merger\ProjectFileProcessor;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -17,13 +19,17 @@ final class ProjectDependencyDetectorTest extends TestCase
 {
     private ProjectDependencyDetector $detector;
 
+    private ProjectFileProcessor $processor;
+
     private static string $tempDir;
 
     protected function setUp(): void
     {
-        // 创建 mock 依赖
-        $processor = $this->createMock(ProjectFileProcessor::class);
-        $this->detector = new ProjectDependencyDetector($processor);
+        // 使用真实实现替代 Mock
+        $logger = new NullLogger();
+        $deduplicator = new NodeDeduplicator($logger);
+        $this->processor = new ProjectFileProcessor($logger, $deduplicator);
+        $this->detector = new ProjectDependencyDetector($this->processor);
         self::$tempDir = sys_get_temp_dir() . '/dependency-detector-test-' . uniqid();
         mkdir(self::$tempDir, 0o777, true);
     }
@@ -53,39 +59,8 @@ class Class2 {
 }
 ');
 
-        // 配置 mock 返回包含循环依赖的数据
-        $processor = $this->createMock(ProjectFileProcessor::class);
-        $processor->method('processFile')->willReturnCallback(function ($filePath) use ($file1, $file2) {
-            if ($filePath === $file1) {
-                return [
-                    'ast' => [],
-                    'dependencies' => ['App\Class2'], // 依赖 Class2
-                    'symbols' => ['classes' => ['App\Class1'], 'functions' => [], 'constants' => []],
-                    'metadata' => [],
-                    'path' => $file1,
-                ];
-            }
-            if ($filePath === $file2) {
-                return [
-                    'ast' => [],
-                    'dependencies' => ['App\Class1'], // 依赖 Class1，形成循环
-                    'symbols' => ['classes' => ['App\Class2'], 'functions' => [], 'constants' => []],
-                    'metadata' => [],
-                    'path' => $file2,
-                ];
-            }
-
-            return [
-                'ast' => [],
-                'dependencies' => [],
-                'symbols' => ['classes' => [], 'functions' => [], 'constants' => []],
-                'metadata' => [],
-                'path' => $filePath,
-            ];
-        });
-
-        $detector = new ProjectDependencyDetector($processor);
-        $circularDeps = $detector->detectCircularDependencies([$file1, $file2]);
+        // 使用真实的 processor 处理文件
+        $circularDeps = $this->detector->detectCircularDependencies([$file1, $file2]);
 
         $this->assertIsArray($circularDeps);
         $this->assertNotEmpty($circularDeps);
@@ -107,39 +82,8 @@ use App\BaseClass;
 class ChildClass extends BaseClass {}
 ');
 
-        // 配置 mock 返回无循环依赖的数据
-        $processor = $this->createMock(ProjectFileProcessor::class);
-        $processor->method('processFile')->willReturnCallback(function ($filePath) use ($file1, $file2) {
-            if ($filePath === $file1) {
-                return [
-                    'ast' => [],
-                    'dependencies' => [], // BaseClass 没有依赖
-                    'symbols' => ['classes' => ['App\BaseClass'], 'functions' => [], 'constants' => []],
-                    'metadata' => [],
-                    'path' => $file1,
-                ];
-            }
-            if ($filePath === $file2) {
-                return [
-                    'ast' => [],
-                    'dependencies' => ['App\BaseClass'], // ChildClass 依赖 BaseClass，但不是循环
-                    'symbols' => ['classes' => ['App\ChildClass'], 'functions' => [], 'constants' => []],
-                    'metadata' => [],
-                    'path' => $file2,
-                ];
-            }
-
-            return [
-                'ast' => [],
-                'dependencies' => [],
-                'symbols' => ['classes' => [], 'functions' => [], 'constants' => []],
-                'metadata' => [],
-                'path' => $filePath,
-            ];
-        });
-
-        $detector = new ProjectDependencyDetector($processor);
-        $circularDeps = $detector->detectCircularDependencies([$file1, $file2]);
+        // 使用真实的 processor 处理文件
+        $circularDeps = $this->detector->detectCircularDependencies([$file1, $file2]);
 
         $this->assertIsArray($circularDeps);
         $this->assertEmpty($circularDeps);
@@ -220,48 +164,8 @@ class C {
 }
 ');
 
-        // 配置 mock 返回包含复杂循环依赖的数据
-        $processor = $this->createMock(ProjectFileProcessor::class);
-        $processor->method('processFile')->willReturnCallback(function ($filePath) use ($file1, $file2, $file3) {
-            if ($filePath === $file1) {
-                return [
-                    'ast' => [],
-                    'dependencies' => ['App\B'], // A -> B
-                    'symbols' => ['classes' => ['App\A'], 'functions' => [], 'constants' => []],
-                    'metadata' => [],
-                    'path' => $file1,
-                ];
-            }
-            if ($filePath === $file2) {
-                return [
-                    'ast' => [],
-                    'dependencies' => ['App\C'], // B -> C
-                    'symbols' => ['classes' => ['App\B'], 'functions' => [], 'constants' => []],
-                    'metadata' => [],
-                    'path' => $file2,
-                ];
-            }
-            if ($filePath === $file3) {
-                return [
-                    'ast' => [],
-                    'dependencies' => ['App\A'], // C -> A，形成 A -> B -> C -> A 循环
-                    'symbols' => ['classes' => ['App\C'], 'functions' => [], 'constants' => []],
-                    'metadata' => [],
-                    'path' => $file3,
-                ];
-            }
-
-            return [
-                'ast' => [],
-                'dependencies' => [],
-                'symbols' => ['classes' => [], 'functions' => [], 'constants' => []],
-                'metadata' => [],
-                'path' => $filePath,
-            ];
-        });
-
-        $detector = new ProjectDependencyDetector($processor);
-        $circularDeps = $detector->detectCircularDependencies([$file1, $file2, $file3]);
+        // 使用真实的 processor 处理文件
+        $circularDeps = $this->detector->detectCircularDependencies([$file1, $file2, $file3]);
 
         $this->assertIsArray($circularDeps);
         $this->assertNotEmpty($circularDeps);
@@ -278,18 +182,8 @@ class SelfDependent {
 }
 ');
 
-        // 配置 mock 返回包含自依赖的数据
-        $processor = $this->createMock(ProjectFileProcessor::class);
-        $processor->method('processFile')->willReturn([
-            'ast' => [],
-            'dependencies' => ['App\SelfDependent'], // 自依赖
-            'symbols' => ['classes' => ['App\SelfDependent'], 'functions' => [], 'constants' => []],
-            'metadata' => [],
-            'path' => $file,
-        ]);
-
-        $detector = new ProjectDependencyDetector($processor);
-        $circularDeps = $detector->detectCircularDependencies([$file]);
+        // 使用真实的 processor 处理文件
+        $circularDeps = $this->detector->detectCircularDependencies([$file]);
 
         $this->assertIsArray($circularDeps);
         $this->assertNotEmpty($circularDeps);

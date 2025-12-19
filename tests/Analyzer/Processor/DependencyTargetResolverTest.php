@@ -35,7 +35,7 @@ final class DependencyTargetResolverTest extends TestCase
         $pathResolver = new PathResolver($logger, $rootPath);
 
         $fileVerifier = new FileVerifier($logger);
-        $autoloadResolver = new AutoloadResolver($storage, $logger, $rootPath);
+        $autoloadResolver = new AutoloadResolver($storage, $logger);
         $classFinder = new ClassFinder(
             $storage,
             $logger,

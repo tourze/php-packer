@@ -9,7 +9,7 @@ use PhpParser\Node;
 use PhpParser\Node\Stmt;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -21,7 +21,7 @@ final class NodeDeduplicatorTest extends TestCase
 
     protected function setUp(): void
     {
-        $logger = $this->createMock(LoggerInterface::class);
+        $logger = new NullLogger();
         $this->deduplicator = new NodeDeduplicator($logger);
     }
 

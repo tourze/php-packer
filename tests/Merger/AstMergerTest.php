@@ -420,7 +420,7 @@ class UnusedClass {
     {
         self::$dbPath = sys_get_temp_dir() . '/test_merger_' . uniqid() . '.db';
         $this->storage = new SqliteStorage(self::$dbPath, new NullLogger());
-        $this->merger = new AstMerger($this->storage, new NullLogger());
+        $this->merger = new AstMerger(new NullLogger());
     }
 
     public static function tearDownAfterClass(): void

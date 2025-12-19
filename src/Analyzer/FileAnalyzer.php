@@ -133,7 +133,7 @@ class FileAnalyzer
     ): void {
         $this->storage->storeAst($fileId, $ast);
 
-        $visitor = new AnalysisVisitor($this->storage, $fileId, $namespace, $filePath);
+        $visitor = new AnalysisVisitor($this->storage, $fileId, $namespace);
         $traverser = new NodeTraverser();
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);

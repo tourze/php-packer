@@ -8,7 +8,7 @@ use PhpPacker\Analyzer\AutoloadResolver;
 use PhpPacker\Storage\SqliteStorage;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -19,8 +19,6 @@ final class AutoloadResolverTest extends TestCase
     private AutoloadResolver $resolver;
 
     private SqliteStorage $storage;
-
-    private LoggerInterface $logger;
 
     private string $dbPath;
 
@@ -292,10 +290,6 @@ namespace {
     {
         $this->createComposerJson([]);
 
-        $this->logger->expects($this->never())
-            ->method('error')
-        ;
-
         $this->resolver->loadComposerAutoload($this->tempDir . '/composer.json');
 
         $rules = $this->storage->getAutoloadRules();
@@ -306,22 +300,20 @@ namespace {
     {
         file_put_contents($this->tempDir . '/composer.json', 'invalid json');
 
-        $this->logger->expects($this->once())
-            ->method('error')
-            ->with('Invalid composer.json')
-        ;
-
         $this->resolver->loadComposerAutoload($this->tempDir . '/composer.json');
+
+        // Invalid JSON should not add any autoload rules
+        $rules = $this->storage->getAutoloadRules();
+        $this->assertCount(0, $rules);
     }
 
     public function testNonExistentComposerJson(): void
     {
-        $this->logger->expects($this->once())
-            ->method('warning')
-            ->with('Composer.json not found')
-        ;
-
         $this->resolver->loadComposerAutoload($this->tempDir . '/non-existent.json');
+
+        // Non-existent file should not add any autoload rules
+        $rules = $this->storage->getAutoloadRules();
+        $this->assertCount(0, $rules);
     }
 
     public function testPathNormalization(): void
@@ -352,8 +344,8 @@ namespace {
         $this->tempDir = sys_get_temp_dir() . '/php-packer-test-' . uniqid();
         mkdir($this->tempDir, 0o777, true);
 
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->storage = new SqliteStorage($this->dbPath, $this->logger);
-        $this->resolver = new AutoloadResolver($this->storage, $this->logger, $this->tempDir);
+        $logger = new NullLogger();
+        $this->storage = new SqliteStorage($this->dbPath, $logger);
+        $this->resolver = new AutoloadResolver($this->storage, $logger);
     }
 }

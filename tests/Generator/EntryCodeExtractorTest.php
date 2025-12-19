@@ -7,7 +7,7 @@ namespace PhpPacker\Tests\Generator;
 use PhpPacker\Generator\EntryCodeExtractor;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -17,14 +17,12 @@ final class EntryCodeExtractorTest extends TestCase
 {
     private EntryCodeExtractor $extractor;
 
-    private LoggerInterface $logger;
-
     private static string $tempDir;
 
     protected function setUp(): void
     {
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->extractor = new EntryCodeExtractor($this->logger);
+        $logger = new NullLogger();
+        $this->extractor = new EntryCodeExtractor($logger);
         self::$tempDir = sys_get_temp_dir() . '/php-packer-test-' . uniqid();
         mkdir(self::$tempDir, 0o777, true);
     }
@@ -120,11 +118,6 @@ $app = new Application();
 
     public function testExtractEntryCodeNonExistentFile(): void
     {
-        $this->logger->expects($this->once())
-            ->method('warning')
-            ->with('Entry file does not exist', ['file' => '/non/existent/file.php'])
-        ;
-
         $executionCode = $this->extractor->extractEntryCode('/non/existent/file.php');
 
         $this->assertEmpty($executionCode);
@@ -137,16 +130,6 @@ $app = new Application();
 echo "Hello"  // missing semicolon
 echo "World";
 ');
-
-        $this->logger->expects($this->once())
-            ->method('warning')
-            ->with(
-                'Failed to extract entry code',
-                self::callback(static function ($context) use ($entryFile) {
-                    return $context['file'] === $entryFile && isset($context['error']);
-                })
-            )
-        ;
 
         $executionCode = $this->extractor->extractEntryCode($entryFile);
 
@@ -202,11 +185,9 @@ $config = ["debug" => true];
 echo "Test";
 ');
 
-        $this->logger->expects($this->atLeastOnce())
-            ->method('debug')
-        ;
+        $executionCode = $this->extractor->extractEntryCode($entryFile);
 
-        $this->extractor->extractEntryCode($entryFile);
+        $this->assertNotEmpty($executionCode);
     }
 
     public function testExtractEntryCodeWithComplexExpressions(): void

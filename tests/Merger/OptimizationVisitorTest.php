@@ -10,7 +10,6 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Echo_;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
 
 /**
  * @internal
@@ -20,12 +19,9 @@ final class OptimizationVisitorTest extends TestCase
 {
     private OptimizationVisitor $visitor;
 
-    private LoggerInterface $logger;
-
     protected function setUp(): void
     {
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->visitor = new OptimizationVisitor($this->logger);
+        $this->visitor = new OptimizationVisitor();
     }
 
     public function testBeforeTraverse(): void

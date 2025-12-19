@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace PhpPacker\Merger;
 
-use PhpPacker\Storage\SqliteStorage;
 use PhpParser\Node;
 use Psr\Log\LoggerInterface;
 
@@ -18,10 +17,7 @@ class AstMerger
 
     private AstOptimizer $optimizer;
 
-    /**
-     * @phpstan-ignore-next-line constructor.unusedParameter
-     */
-    public function __construct(SqliteStorage $storage, LoggerInterface $logger)
+    public function __construct(LoggerInterface $logger)
     {
         $this->logger = $logger;
 

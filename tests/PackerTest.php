@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace PhpPacker\Tests;
 
 use PhpPacker\Adapter\ConfigurationAdapter;
+use PhpPacker\Exception\ConfigurationException;
 use PhpPacker\Exception\GeneralPackerException;
 use PhpPacker\Packer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -17,95 +18,86 @@ use Psr\Log\LoggerInterface;
 #[CoversClass(Packer::class)]
 final class PackerTest extends TestCase
 {
+    private string $tempDir;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->tempDir = sys_get_temp_dir() . '/packer_test_' . uniqid();
+        mkdir($this->tempDir, 0o755, true);
+    }
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        $this->cleanupTempDir();
+    }
+
+    private function cleanupTempDir(): void
+    {
+        if (!is_dir($this->tempDir)) {
+            return;
+        }
+
+        $files = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->tempDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ($files as $fileinfo) {
+            $todo = ($fileinfo->isDir() ? 'rmdir' : 'unlink');
+            $todo($fileinfo->getRealPath());
+        }
+
+        rmdir($this->tempDir);
+    }
+
+    private function createConfigFile(array $config): string
+    {
+        $configPath = $this->tempDir . '/packer.json';
+        file_put_contents($configPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        return $configPath;
+    }
+
     public function testConstructor(): void
     {
-        /*
-         * 使用具体类 ConfigurationAdapter 进行 mock 的原因：
-         * 1) 为什么必须使用具体类而不是接口：ConfigurationAdapter 没有对应的接口拽象，且 Packer 构造函数直接依赖具体实现
-         * 2) 这种使用是否合理和必要：在单元测试中合理，避免真实的配置文件读取，专注测试 Packer 的初始化逻辑
-         * 3) 是否有更好的替代方案：为配置适配器定义接口会改善架构，但当前使用 mock 是有效的测试方法
-         */
-        $config = $this->createMock(ConfigurationAdapter::class);
-        $logger = $this->createMock(LoggerInterface::class);
+        $configPath = $this->createConfigFile([
+            'entry' => 'entry.php',
+            'output' => 'output.php',
+            'database' => 'build/packer.db',
+        ]);
 
-        // Mock the required methods that are called during initialization
-        $config->method('get')
-            ->willReturnMap([
-                ['database', 'build/packer.db', 'build/packer.db'],
-            ])
-        ;
+        $config = new ConfigurationAdapter($configPath, new NullLogger());
+        $packer = new Packer($config, new NullLogger());
 
-        $config->method('getRootPath')
-            ->willReturn('/tmp')
-        ;
-
-        $config->method('all')
-            ->willReturn([])
-        ;
-
-        $packer = new Packer($config, $logger);
         $this->assertInstanceOf(Packer::class, $packer);
     }
 
     public function testPackWithMissingEntry(): void
     {
-        $config = $this->createMock(ConfigurationAdapter::class);
-        $logger = $this->createMock(LoggerInterface::class);
+        // Create config without 'entry' field - will fail validation
+        $configPath = $this->tempDir . '/packer.json';
+        file_put_contents($configPath, json_encode([
+            'output' => 'output.php',
+        ], JSON_PRETTY_PRINT));
 
-        // Mock basic methods for initialization
-        $config->method('get')
-            ->willReturnCallback(function ($key, $default = null) {
-                return match ($key) {
-                    'database' => 'build/test.db',
-                    'entry' => null, // No entry file specified
-                    default => $default,
-                };
-            })
-        ;
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('Required configuration field missing: entry');
 
-        $config->method('getRootPath')
-            ->willReturn(sys_get_temp_dir())
-        ;
-
-        $config->method('all')
-            ->willReturn([])
-        ;
-
-        $packer = new Packer($config, $logger);
-
-        $this->expectException(GeneralPackerException::class);
-        $this->expectExceptionMessage('Entry file not specified in configuration');
-
-        $packer->pack();
+        new ConfigurationAdapter($configPath, new NullLogger());
     }
 
     public function testPackWithNonExistentEntry(): void
     {
-        $config = $this->createMock(ConfigurationAdapter::class);
-        $logger = $this->createMock(LoggerInterface::class);
+        $configPath = $this->createConfigFile([
+            'entry' => 'non-existent-file.php',
+            'output' => 'packed.php',
+            'database' => 'build/test.db',
+        ]);
 
-        $tempDir = sys_get_temp_dir();
-
-        // Mock basic methods for initialization
-        $config->method('get')
-            ->willReturnCallback(function ($key, $default = null) {
-                return match ($key) {
-                    'database' => 'build/test.db',
-                    'entry' => 'non-existent-file.php',
-                    default => $default,
-                };
-            })
-        ;
-
-        $config->method('getRootPath')
-            ->willReturn($tempDir)
-        ;
-
-        $config->method('all')
-            ->willReturn([])
-        ;
-
-        $packer = new Packer($config, $logger);
+        $config = new ConfigurationAdapter($configPath, new NullLogger());
+        $packer = new Packer($config, new NullLogger());
 
         $this->expectException(GeneralPackerException::class);
         $this->expectExceptionMessage('Entry file not found');
@@ -115,61 +107,28 @@ final class PackerTest extends TestCase
 
     public function testPackSuccessfulExecution(): void
     {
-        $config = $this->createMock(ConfigurationAdapter::class);
-        $logger = $this->createMock(LoggerInterface::class);
-
-        $tempDir = sys_get_temp_dir() . '/packer_test_' . uniqid();
-        mkdir($tempDir, 0o755, true);
-
-        // Create a temporary entry file
-        $entryFile = $tempDir . '/entry.php';
+        // Create entry file
+        $entryFile = $this->tempDir . '/entry.php';
         file_put_contents($entryFile, '<?php echo "test";');
 
-        // Mock basic methods for initialization
-        $config->method('get')
-            ->willReturnCallback(function ($key, $default = null) use ($tempDir) {
-                return match ($key) {
-                    'database' => $tempDir . '/test.db',
-                    'entry' => 'entry.php',
-                    'output' => 'packed.php',
-                    'autoload' => [],
-                    default => $default,
-                };
-            })
-        ;
+        // Create configuration
+        $configPath = $this->createConfigFile([
+            'entry' => 'entry.php',
+            'output' => 'packed.php',
+            'database' => 'build/test.db',
+            'autoload' => [],
+            'include' => [],
+            'exclude' => [],
+        ]);
 
-        $config->method('getRootPath')
-            ->willReturn($tempDir)
-        ;
-
-        $config->method('all')
-            ->willReturn([])
-        ;
-
-        $config->method('getIncludePatterns')
-            ->willReturn([])
-        ;
-
-        $config->method('shouldExclude')
-            ->willReturn(false)
-        ;
-
-        $packer = new Packer($config, $logger);
+        $config = new ConfigurationAdapter($configPath, new NullLogger());
+        $packer = new Packer($config, new NullLogger());
 
         // Should not throw any exception
         $packer->pack();
 
         // Verify output file was created
-        $outputFile = $tempDir . '/packed.php';
+        $outputFile = $this->tempDir . '/packed.php';
         $this->assertFileExists($outputFile);
-
-        // Cleanup
-        unlink($entryFile);
-        unlink($outputFile);
-        unlink($tempDir . '/test.db');
-        if (is_dir($tempDir . '/build')) {
-            @rmdir($tempDir . '/build');
-        }
-        rmdir($tempDir);
     }
 }

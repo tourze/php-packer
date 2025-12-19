@@ -9,7 +9,7 @@ use PhpPacker\Merger\ProjectFileProcessor;
 use PhpParser\Node\Stmt\Namespace_;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -23,9 +23,9 @@ final class ProjectFileProcessorTest extends TestCase
 
     protected function setUp(): void
     {
-        // 创建 mock 依赖
-        $logger = $this->createMock(LoggerInterface::class);
-        $deduplicator = $this->createMock(NodeDeduplicator::class);
+        // 使用真实实现替代 Mock
+        $logger = new NullLogger();
+        $deduplicator = new NodeDeduplicator($logger);
 
         $this->processor = new ProjectFileProcessor($logger, $deduplicator);
         self::$tempDir = sys_get_temp_dir() . '/project-processor-test-' . uniqid();

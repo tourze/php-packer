@@ -91,7 +91,7 @@ Options:
             ];
 
             // 创建代码生成器
-            $codeGenerator = new AstCodeGenerator($storage, $this->logger, $config);
+            $codeGenerator = new AstCodeGenerator($this->logger, $config);
 
             // 执行打包
             $codeGenerator->generate($files, $entryFile['path'], $outputPath);

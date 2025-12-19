@@ -10,7 +10,7 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Echo_;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -20,12 +20,10 @@ final class AstOptimizerTest extends TestCase
 {
     private AstOptimizer $optimizer;
 
-    private LoggerInterface $logger;
-
     protected function setUp(): void
     {
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->optimizer = new AstOptimizer($this->logger);
+        $logger = new NullLogger();
+        $this->optimizer = new AstOptimizer($logger);
     }
 
     public function testOptimizeAst(): void
@@ -55,7 +53,7 @@ final class AstOptimizerTest extends TestCase
 
     public function testOptimizerWithLogger(): void
     {
-        $logger = $this->createMock(LoggerInterface::class);
+        $logger = new NullLogger();
         $optimizer = new AstOptimizer($logger);
 
         $ast = [new Variable('test')];

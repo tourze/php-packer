@@ -7,7 +7,7 @@ namespace PhpPacker\Tests\Analyzer;
 use PhpPacker\Analyzer\FileVerifier;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -21,7 +21,7 @@ final class FileVerifierTest extends TestCase
 
     protected function setUp(): void
     {
-        $logger = $this->createMock(LoggerInterface::class);
+        $logger = new NullLogger();
         $this->verifier = new FileVerifier($logger);
         $this->tempDir = sys_get_temp_dir() . '/file-verifier-test-' . uniqid();
         mkdir($this->tempDir, 0o777, true);

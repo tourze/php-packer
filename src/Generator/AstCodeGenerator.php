@@ -6,7 +6,6 @@ namespace PhpPacker\Generator;
 
 use PhpPacker\Exception\CodeGenerationException;
 use PhpPacker\Merger\AstMerger;
-use PhpPacker\Storage\SqliteStorage;
 use PhpPacker\Visitor\FqcnTransformVisitor;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
@@ -34,17 +33,15 @@ class AstCodeGenerator
     private EntryCodeExtractor $entryExtractor;
 
     /**
-     * @param SqliteStorage $storage
      * @param LoggerInterface $logger
      * @param array<string, mixed> $config
      */
     public function __construct(
-        SqliteStorage $storage,
         LoggerInterface $logger,
         array $config = [],
     ) {
         $this->printer = new PrettyPrinter\Standard();
-        $this->merger = new AstMerger($storage, $logger);
+        $this->merger = new AstMerger($logger);
         $this->logger = $logger;
         $this->config = $config;
         $factory = new ParserFactory();

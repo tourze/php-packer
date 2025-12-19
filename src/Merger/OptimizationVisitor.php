@@ -6,7 +6,6 @@ namespace PhpPacker\Merger;
 
 use PhpParser\Node;
 use PhpParser\NodeVisitorAbstract;
-use Psr\Log\LoggerInterface;
 
 /**
  * AST 优化访问器
@@ -14,14 +13,6 @@ use Psr\Log\LoggerInterface;
 class OptimizationVisitor extends NodeVisitorAbstract
 {
     private bool $collectMode = true;
-
-    /**
-     * @phpstan-ignore-next-line constructor.unusedParameter
-     */
-    public function __construct(LoggerInterface $logger)
-    {
-        // Logger not used in current implementation
-    }
 
     public function beforeTraverse(array $nodes)
     {

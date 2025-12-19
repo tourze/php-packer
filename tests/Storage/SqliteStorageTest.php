@@ -8,7 +8,7 @@ use PhpPacker\Storage\SqliteStorage;
 use PhpParser\Node\Scalar\String_;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -17,8 +17,6 @@ use Psr\Log\LoggerInterface;
 final class SqliteStorageTest extends TestCase
 {
     private static string $dbPath;
-
-    private LoggerInterface $logger;
 
     private SqliteStorage $storage;
 
@@ -190,10 +188,10 @@ final class SqliteStorageTest extends TestCase
         $entryDependencies = $this->storage->getDependenciesByFile($entryId);
         $file1Dependencies = $this->storage->getDependenciesByFile($file1Id);
 
-        if (!empty($entryDependencies)) {
+        if ($entryDependencies !== []) {
             $this->storage->resolveDependency($entryDependencies[0]['id'], $file1Id);
         }
-        if (!empty($file1Dependencies)) {
+        if ($file1Dependencies !== []) {
             $this->storage->resolveDependency($file1Dependencies[0]['id'], $file2Id);
         }
 
@@ -240,7 +238,7 @@ final class SqliteStorageTest extends TestCase
 
         // Get the dependency and resolve it
         $dependencies = $this->storage->getDependenciesByFile($sourceId);
-        if (!empty($dependencies)) {
+        if ($dependencies !== []) {
             $this->storage->resolveDependency($dependencies[0]['id'], $targetId);
         }
 
@@ -290,8 +288,7 @@ final class SqliteStorageTest extends TestCase
     protected function setUp(): void
     {
         self::$dbPath = sys_get_temp_dir() . '/php-packer-test-' . uniqid() . '.db';
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->storage = new SqliteStorage(self::$dbPath, $this->logger);
+        $this->storage = new SqliteStorage(self::$dbPath, new NullLogger());
     }
 
     public static function tearDownAfterClass(): void
@@ -469,7 +466,7 @@ final class SqliteStorageTest extends TestCase
 
         // Get dependencies and resolve the first one
         $dependencies = $this->storage->getDependenciesByFile($sourceFileId);
-        if (!empty($dependencies)) {
+        if ($dependencies !== []) {
             $this->storage->resolveDependency($dependencies[0]['id'], $targetFileId);
         }
 
@@ -859,13 +856,13 @@ final class SqliteStorageTest extends TestCase
         $depsB = $this->storage->getDependenciesByFile($fileB);
         $depsC = $this->storage->getDependenciesByFile($fileC);
 
-        if (!empty($depsA)) {
+        if ($depsA !== []) {
             $this->storage->resolveDependency($depsA[0]['id'], $fileB);
         }
-        if (!empty($depsB)) {
+        if ($depsB !== []) {
             $this->storage->resolveDependency($depsB[0]['id'], $fileC);
         }
-        if (!empty($depsC)) {
+        if ($depsC !== []) {
             $this->storage->resolveDependency($depsC[0]['id'], $fileD);
         }
 
@@ -1136,7 +1133,7 @@ final class SqliteStorageTest extends TestCase
         $this->storage->beginTransaction();
 
         $fileId = $this->storage->addFile('consistency_test.php', '<?php');
-        $symbolId = $this->storage->addSymbol($fileId, 'class', 'TestClass', 'TestClass');
+        $this->storage->addSymbol($fileId, 'class', 'TestClass', 'TestClass');
         $this->storage->addDependency($fileId, null, 'use_class', 'OtherClass');
 
         // All should be present in transaction

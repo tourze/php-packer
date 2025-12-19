@@ -64,7 +64,7 @@ class Packer
         $rootPath = $this->config->getRootPath();
         $this->fileAnalyzer = new FileAnalyzer($this->storage, $this->logger, $rootPath);
 
-        $this->autoloadResolver = new AutoloadResolver($this->storage, $this->logger, $rootPath);
+        $this->autoloadResolver = new AutoloadResolver($this->storage, $this->logger);
 
         $this->dependencyResolver = new DependencyResolver(
             $this->storage,
@@ -75,7 +75,6 @@ class Packer
         );
 
         $this->codeGenerator = new AstCodeGenerator(
-            $this->storage,
             $this->logger,
             $this->config->all()
         );

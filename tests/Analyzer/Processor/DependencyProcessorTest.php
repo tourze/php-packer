@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace PhpPacker\Tests\Analyzer\Processor;
 
 use PhpPacker\Analyzer\Processor\DependencyProcessor;
-use PhpPacker\Storage\StorageInterface;
+use PhpPacker\Storage\SqliteStorage;
 use PhpParser\Node;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -20,11 +21,21 @@ final class DependencyProcessorTest extends TestCase
 {
     private DependencyProcessor $processor;
 
+    private string $dbPath;
+
     protected function setUp(): void
     {
-        $storage = $this->createMock(StorageInterface::class);
+        $this->dbPath = sys_get_temp_dir() . '/test-' . uniqid() . '.db';
+        $storage = new SqliteStorage($this->dbPath, new NullLogger());
         $fileId = 1;
         $this->processor = new DependencyProcessor($storage, $fileId);
+    }
+
+    protected function tearDown(): void
+    {
+        if (file_exists($this->dbPath)) {
+            unlink($this->dbPath);
+        }
     }
 
     public function testProcessClassNode(): void

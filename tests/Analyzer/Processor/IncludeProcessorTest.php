@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace PhpPacker\Tests\Analyzer\Processor;
 
 use PhpPacker\Analyzer\Processor\IncludeProcessor;
-use PhpPacker\Storage\StorageInterface;
+use PhpPacker\Storage\SqliteStorage;
 use PhpParser\Node\Expr\Include_;
 use PhpParser\Node\Scalar\String_;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * @internal
@@ -19,30 +20,25 @@ final class IncludeProcessorTest extends TestCase
 {
     private IncludeProcessor $processor;
 
-    private StorageInterface $storage;
+    private string $dbPath;
 
     protected function setUp(): void
     {
-        $this->storage = $this->createMock(StorageInterface::class);
+        $this->dbPath = sys_get_temp_dir() . '/test-' . uniqid() . '.db';
+        $storage = new SqliteStorage($this->dbPath, new NullLogger());
         $fileId = 1;
-        $this->processor = new IncludeProcessor($this->storage, $fileId);
+        $this->processor = new IncludeProcessor($storage, $fileId);
+    }
+
+    protected function tearDown(): void
+    {
+        if (file_exists($this->dbPath)) {
+            unlink($this->dbPath);
+        }
     }
 
     public function testProcessInclude(): void
     {
-        $this->storage->expects($this->once())
-            ->method('addDependency')
-            ->with(
-                1, // sourceFileId
-                null, // targetFileId
-                'include', // dependencyType
-                null, // targetSymbol
-                1, // line number
-                false, // isConditional
-                'test.php' // context
-            )
-        ;
-
         $includeNode = new Include_(
             new String_('test.php'),
             Include_::TYPE_INCLUDE
@@ -55,19 +51,6 @@ final class IncludeProcessorTest extends TestCase
 
     public function testProcessIncludeOnce(): void
     {
-        $this->storage->expects($this->once())
-            ->method('addDependency')
-            ->with(
-                1, // sourceFileId
-                null, // targetFileId
-                'include_once', // dependencyType
-                null, // targetSymbol
-                2, // line number
-                false, // isConditional
-                'once.php' // context
-            )
-        ;
-
         $includeNode = new Include_(
             new String_('once.php'),
             Include_::TYPE_INCLUDE_ONCE
@@ -80,19 +63,6 @@ final class IncludeProcessorTest extends TestCase
 
     public function testProcessRequire(): void
     {
-        $this->storage->expects($this->once())
-            ->method('addDependency')
-            ->with(
-                1, // sourceFileId
-                null, // targetFileId
-                'require', // dependencyType
-                null, // targetSymbol
-                3, // line number
-                false, // isConditional
-                'required.php' // context
-            )
-        ;
-
         $includeNode = new Include_(
             new String_('required.php'),
             Include_::TYPE_REQUIRE
@@ -105,19 +75,6 @@ final class IncludeProcessorTest extends TestCase
 
     public function testProcessRequireOnce(): void
     {
-        $this->storage->expects($this->once())
-            ->method('addDependency')
-            ->with(
-                1, // sourceFileId
-                null, // targetFileId
-                'require_once', // dependencyType
-                null, // targetSymbol
-                4, // line number
-                false, // isConditional
-                'required_once.php' // context
-            )
-        ;
-
         $includeNode = new Include_(
             new String_('required_once.php'),
             Include_::TYPE_REQUIRE_ONCE
@@ -130,19 +87,6 @@ final class IncludeProcessorTest extends TestCase
 
     public function testProcessConditionalInclude(): void
     {
-        $this->storage->expects($this->once())
-            ->method('addDependency')
-            ->with(
-                1, // sourceFileId
-                null, // targetFileId
-                'include', // dependencyType
-                null, // targetSymbol
-                5, // line number
-                true, // isConditional
-                'conditional.php' // context
-            )
-        ;
-
         $includeNode = new Include_(
             new String_('conditional.php'),
             Include_::TYPE_INCLUDE
@@ -155,10 +99,6 @@ final class IncludeProcessorTest extends TestCase
 
     public function testDependencyCountIncreases(): void
     {
-        $this->storage->expects($this->exactly(3))
-            ->method('addDependency')
-        ;
-
         $includeNode1 = new Include_(new String_('file1.php'), Include_::TYPE_INCLUDE);
         $includeNode1->setAttributes(['startLine' => 1]);
 

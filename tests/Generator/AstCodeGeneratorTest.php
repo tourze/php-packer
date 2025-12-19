@@ -91,7 +91,7 @@ final class AstCodeGeneratorTest extends TestCase
             ],
         ];
 
-        $generator = new AstCodeGenerator($this->storage, new NullLogger(), $config);
+        $generator = new AstCodeGenerator(new NullLogger(), $config);
 
         $files = [
             [
@@ -133,7 +133,7 @@ class App {
             'error_handler' => true,
         ];
 
-        $generator = new AstCodeGenerator($this->storage, new NullLogger(), $config);
+        $generator = new AstCodeGenerator(new NullLogger(), $config);
 
         $files = [
             [
@@ -285,7 +285,7 @@ class App {
             ],
         ];
 
-        $generator = new AstCodeGenerator($this->storage, new NullLogger(), $config);
+        $generator = new AstCodeGenerator(new NullLogger(), $config);
 
         $files = [
             [
@@ -333,6 +333,6 @@ class App {
         $this->dbPath = sys_get_temp_dir() . '/test_generator_' . uniqid() . '.db';
         $this->outputPath = sys_get_temp_dir() . '/test_output_' . uniqid() . '.php';
         $this->storage = new SqliteStorage($this->dbPath, new NullLogger());
-        $this->generator = new AstCodeGenerator($this->storage, new NullLogger());
+        $this->generator = new AstCodeGenerator(new NullLogger());
     }
 }
